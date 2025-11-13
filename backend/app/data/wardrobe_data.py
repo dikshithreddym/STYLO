@@ -1,0 +1,88 @@
+# Shared dummy wardrobe data for reuse across routers
+
+DUMMY_WARDROBE_ITEMS = [
+    {
+        "id": 1,
+        "type": "T-Shirt",
+        "color": "Navy Blue",
+        "image_url": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400",
+        "category": "top",
+    },
+    {
+        "id": 2,
+        "type": "Jeans",
+        "color": "Dark Denim",
+        "image_url": "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400",
+        "category": "bottom",
+    },
+    {
+        "id": 3,
+        "type": "Dress Shirt",
+        "color": "White",
+        "image_url": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400",
+        "category": "top",
+    },
+    {
+        "id": 4,
+        "type": "Blazer",
+        "color": "Charcoal Grey",
+        "image_url": "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=400",
+        "category": "layer",
+    },
+    {
+        "id": 5,
+        "type": "Sneakers",
+        "color": "White",
+        "image_url": "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400",
+        "category": "shoes",
+    },
+    {
+        "id": 6,
+        "type": "Cardigan",
+        "color": "Beige",
+        "image_url": "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=400",
+        "category": "layer",
+    },
+    {
+        "id": 7,
+        "type": "Dress",
+        "color": "Black",
+        "image_url": "https://images.unsplash.com/photo-1539008835657-9e8e9680c956?w=400",
+        "category": "one-piece",
+    },
+    {
+        "id": 8,
+        "type": "Chinos",
+        "color": "Khaki",
+        "image_url": "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=400",
+        "category": "bottom",
+    },
+    {
+        "id": 9,
+        "type": "Sweater",
+        "color": "Burgundy",
+        "image_url": "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400",
+        "category": "layer",
+    },
+    {
+        "id": 10,
+        "type": "Jacket",
+        "color": "Olive Green",
+        "image_url": "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400",
+        "category": "layer",
+    },
+    {
+        "id": 11,
+        "type": "Boots",
+        "color": "Brown",
+        "image_url": "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400",
+        "category": "shoes",
+    },
+    {
+        "id": 12,
+        "type": "Loafers",
+        "color": "Black",
+        "image_url": "https://images.unsplash.com/photo-1593032457860-3f1a37a94a42?w=400",
+        "category": "shoes",
+    }
+]

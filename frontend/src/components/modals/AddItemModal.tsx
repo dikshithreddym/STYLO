@@ -1,0 +1,268 @@
+'use client'
+
+import { useState, useRef } from 'react'
+import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
+import { wardrobeAPI, WardrobeItem } from '@/lib/api'
+
+interface AddItemModalProps {
+  onClose: () => void
+  onSuccess: (item: WardrobeItem) => void
+}
+
+export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) {
+  const [type, setType] = useState('')
+  const [color, setColor] = useState('')
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [category, setCategory] = useState<'top' | 'bottom' | 'shoes' | 'layer' | 'one-piece'>('top')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [stream, setStream] = useState<MediaStream | null>(null)
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        setError('Please select an image file')
+        return
+      }
+      setImageFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' },
+        audio: false 
+      })
+      setStream(mediaStream)
+      setCameraActive(true)
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream
+      }
+    } catch (err) {
+      console.error(err)
+      setError('Failed to access camera. Please check permissions.')
+    }
+  }
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop())
+      setStream(null)
+    }
+    setCameraActive(false)
+  }
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext('2d')
+      ctx?.drawImage(video, 0, 0)
+      
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' })
+          setImageFile(file)
+          setImagePreview(canvas.toDataURL('image/jpeg'))
+          stopCamera()
+        }
+      }, 'image/jpeg', 0.9)
+    }
+  }
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!type.trim() || !color.trim()) {
+      setError('Type and color are required')
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Convert image to base64 data URL if provided
+      let imageData: string | null = null
+      if (imageFile) {
+        imageData = imagePreview
+      }
+
+      const newItem = await wardrobeAPI.create({
+        type: type.trim(),
+        color: color.trim(),
+        image_url: imageData,
+        category,
+      })
+      onSuccess(newItem)
+      stopCamera()
+      onClose()
+    } catch (err) {
+      console.error(err)
+      setError('Failed to add item. Check backend.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleClose = () => {
+    stopCamera()
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-900">Add Wardrobe Item</h2>
+          <button
+            onClick={handleClose}
+            className="text-gray-400 hover:text-gray-600"
+            aria-label="Close"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit}>
+          <div className="space-y-4">
+            <Input
+              label="Type *"
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              placeholder="e.g., T-Shirt, Jeans, Blazer"
+              required
+            />
+
+            <Input
+              label="Color *"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              placeholder="e.g., Navy Blue, Black, White"
+              required
+            />
+
+            {/* Image Upload Section */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Photo</label>
+              
+              {!imagePreview && !cameraActive && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 transition-colors"
+                  >
+                    <svg className="w-6 h-6 mx-auto mb-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-sm text-gray-600">Upload Image</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    className="flex-1 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 transition-colors"
+                  >
+                    <svg className="w-6 h-6 mx-auto mb-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span className="text-sm text-gray-600">Take Photo</span>
+                  </button>
+                </div>
+              )}
+
+              {cameraActive && (
+                <div className="space-y-2">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full rounded-lg bg-black"
+                  />
+                  <div className="flex gap-2">
+                    <Button type="button" onClick={capturePhoto} className="flex-1">
+                      Capture
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={stopCamera} className="flex-1">
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {imagePreview && (
+                <div className="space-y-2">
+                  <img src={imagePreview} alt="Preview" className="w-full rounded-lg" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageFile(null)
+                      setImagePreview(null)
+                    }}
+                    className="text-sm text-red-600 hover:text-red-800"
+                  >
+                    Remove Image
+                  </button>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as any)}
+                className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+              >
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="shoes">Shoes</option>
+                <option value="layer">Layer</option>
+                <option value="one-piece">One-Piece</option>
+              </select>
+            </div>
+          </div>
+
+          {error && <p className="text-red-600 text-sm mt-3">{error}</p>}
+
+          <div className="flex gap-3 mt-6">
+            <Button type="submit" disabled={loading} className="flex-1">
+              {loading ? 'Adding...' : 'Add Item'}
+            </Button>
+            <Button type="button" variant="ghost" onClick={handleClose} className="flex-1">
+              Cancel
+            </Button>
+          </div>
+        </form>
+
+        {/* Hidden canvas for photo capture */}
+        <canvas ref={canvasRef} className="hidden" />
+      </div>
+    </div>
+  )
+}
