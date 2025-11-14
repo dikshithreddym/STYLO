@@ -589,43 +589,69 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
 
 
 def generate_alternatives(occasion: str, weather: Optional[str], colors: List[str], limit: int, db: Session, query_tokens: List[str] = []) -> List[List[dict]]:
-    # Produce simple variations by toggling bottoms, shoes, and layers
-    base = build_outfit(occasion, weather, colors, db, query_tokens)
-    variations = [base]
+    """Generate multiple distinct outfits by building different combinations"""
+    all_items = get_wardrobe_items(db)
+    variations = []
+    used_globally = set()  # Track items used across all outfits
     
-    base_ids = {it["id"] for it in base}
-
-    # Try alternative bottom if available
-    current_bottom = next((x for x in base if x.get("category") == "bottom"), None)
-    if current_bottom:
-        alt_bottom_type = "Chinos" if "Jeans" in current_bottom["type"] else "Jeans"
-        alt_bottom = _pick(alt_bottom_type, colors, base_ids, "bottom", db, query_tokens)
-        if alt_bottom and alt_bottom["id"] not in base_ids:
-            v = [it for it in base if it.get("category") != "bottom"] + [alt_bottom]
-            variations.append(v)
-
-    # Try alternative shoes
-    current_shoes = next((x for x in base if x.get("category") == "footwear"), None)
-    if current_shoes:
-        alt_shoes_type = "Boots" if "Sneakers" in current_shoes["type"] else "Sneakers"
-        alt_shoes = _pick(alt_shoes_type, colors, base_ids, "shoes", db, query_tokens)
-        if alt_shoes and alt_shoes["id"] not in base_ids:
-            v = [it for it in base if it.get("category") != "shoes"] + [alt_shoes]
-            variations.append(v)
+    # Generate multiple base outfits with different items
+    for outfit_num in range(limit):
+        # Build outfit avoiding items used in previous outfits
+        base = build_outfit(occasion, weather, colors, db, query_tokens)
+        
+        # Filter out items already used in previous outfits
+        base_filtered = [it for it in base if it["id"] not in used_globally]
+        
+        # If we have enough items for a complete outfit, add it
+        if len(base_filtered) >= 2:  # At least top+bottom or similar
+            variations.append(base_filtered)
+            # Mark these items as used
+            for it in base_filtered:
+                used_globally.add(it["id"])
+        elif outfit_num == 0:
+            # First outfit should always be included even if we reuse items
+            variations.append(base)
+            for it in base:
+                used_globally.add(it["id"])
+        else:
+            # Try to create variations of existing outfits by swapping items
+            if variations:
+                last_outfit = variations[-1]
+                base_ids = {it["id"] for it in last_outfit}
+                
+                # Try alternative bottom if available
+                current_bottom = next((x for x in last_outfit if x.get("category") == "bottom"), None)
+                if current_bottom:
+                    items = get_wardrobe_items(db)
+                    alt_bottoms = [it for it in items if it.get("category") == "bottom" and it["id"] not in used_globally and it["id"] != current_bottom["id"]]
+                    if alt_bottoms:
+                        v = [it for it in last_outfit if it.get("category") != "bottom"] + [alt_bottoms[0]]
+                        variations.append(v)
+                        used_globally.add(alt_bottoms[0]["id"])
+                        continue
+                
+                # Try alternative footwear
+                current_shoes = next((x for x in last_outfit if x.get("category") == "footwear"), None)
+                if current_shoes:
+                    items = get_wardrobe_items(db)
+                    alt_shoes = [it for it in items if it.get("category") == "footwear" and it["id"] not in used_globally and it["id"] != current_shoes["id"]]
+                    if alt_shoes:
+                        v = [it for it in last_outfit if it.get("category") != "footwear"] + [alt_shoes[0]]
+                        variations.append(v)
+                        used_globally.add(alt_shoes[0]["id"])
+                        continue
+                
+                # Try alternative top
+                current_top = next((x for x in last_outfit if x.get("category") == "top"), None)
+                if current_top:
+                    items = get_wardrobe_items(db)
+                    alt_tops = [it for it in items if it.get("category") == "top" and it["id"] not in used_globally and it["id"] != current_top["id"]]
+                    if alt_tops:
+                        v = [it for it in last_outfit if it.get("category") != "top"] + [alt_tops[0]]
+                        variations.append(v)
+                        used_globally.add(alt_tops[0]["id"])
+                        continue
     
-    # Try with/without layer for more variety
-    current_layer = next((x for x in base if x.get("category") == "layer"), None)
-    if current_layer:
-        # Variant without layer
-        v = [it for it in base if it.get("category") != "layer"]
-        if len(v) > 0:
-            variations.append(v)
-    else:
-        # Try to add a layer
-        alt_layer = _pick("Hoodie", colors, base_ids, "layer", db, query_tokens)
-        if alt_layer and alt_layer["id"] not in base_ids:
-            variations.append(base + [alt_layer])
-
     # De-duplicate by item id sets
     seen = set()
     unique: List[List[dict]] = []
