@@ -316,11 +316,27 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
         if not any(x for x in result if x["type"].lower() == "chinos"):
             add_if_found("Jeans")
     elif occasion == "party":
-        # Prefer Dress if available, otherwise smart casual
+        # Prefer Dress if available, otherwise try smart casual or fallback to any top+bottom
         add_if_found("Dress")
         if not result:
-            add_if_found("Dress Shirt")
-            add_if_found("Chinos")
+            # Try smart casual combo
+            if not add_if_found("Dress Shirt"):
+                # Fallback to any nice top
+                items = get_wardrobe_items(db)
+                top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
+                if top_items:
+                    result.append(top_items[0])
+                    used.add(top_items[0]["id"])
+            
+            # Add bottoms - prefer Chinos/Jeans
+            if not add_if_found("Chinos"):
+                if not add_if_found("Jeans"):
+                    # Fallback to any bottom
+                    items = get_wardrobe_items(db)
+                    bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+                    if bottom_items:
+                        result.append(bottom_items[0])
+                        used.add(bottom_items[0]["id"])
     else:
         # casual default - try T-Shirt first, then any top
         if not add_if_found("T-Shirt"):
