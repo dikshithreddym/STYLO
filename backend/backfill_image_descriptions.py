@@ -36,28 +36,25 @@ def download_image_as_base64(image_url: str) -> str:
 
 
 async def backfill_descriptions():
-    """Backfill image descriptions for items that don't have them"""
+    """Backfill image descriptions for ALL wardrobe items (force re-analysis)"""
     db = SessionLocal()
     
     try:
-        # Find items without descriptions
-        items_without_desc = db.query(WardrobeItem).filter(
-            (WardrobeItem.image_description == None) | 
-            (WardrobeItem.image_description == "")
-        ).all()
+        # Get ALL items to force re-analysis with new prompt
+        all_items = db.query(WardrobeItem).all()
         
-        if not items_without_desc:
-            print("✅ All items already have descriptions!")
+        if not all_items:
+            print("✅ No items found in wardrobe!")
             return
         
-        print(f"📋 Found {len(items_without_desc)} item(s) without descriptions")
+        print(f"📋 Found {len(all_items)} item(s) to re-analyze")
         print(f"🔑 Gemini API configured: {'Yes' if settings.GEMINI_API_KEY else 'No'}")
         print()
         
         updated_count = 0
         failed_count = 0
         
-        for item in items_without_desc:
+        for item in all_items:
             print(f"🔍 Processing item #{item.id}: {item.type} ({item.color})")
             
             description = None
