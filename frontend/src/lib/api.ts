@@ -16,7 +16,7 @@ export const wardrobeAPI = {
     type?: string
     color?: string
     sort?: 'id' | '-id' | 'type' | '-type' | 'color' | '-color'
-    category?: 'top' | 'bottom' | 'shoes' | 'layer' | 'one-piece'
+    category?: string
   }): Promise<WardrobeItem[]> => {
     const response = await apiClient.get('/wardrobe', { params })
     return response.data
@@ -28,7 +28,7 @@ export const wardrobeAPI = {
     type?: string
     color?: string
     sort?: 'id' | '-id' | 'type' | '-type' | 'color' | '-color' | 'category' | '-category'
-    category?: 'top' | 'bottom' | 'shoes' | 'layer' | 'one-piece'
+    category?: string
     page?: number
     page_size?: number
   }): Promise<{ items: WardrobeItem[]; total: number }> => {
