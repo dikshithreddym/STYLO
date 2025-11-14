@@ -5,7 +5,7 @@ export interface WardrobeItem {
   type: string
   color: string
   image_url: string | null
-  category?: 'top' | 'bottom' | 'shoes' | 'layer' | 'one-piece' | 'accessories'
+  category?: 'top' | 'bottom' | 'footwear' | 'layer' | 'one-piece' | 'accessories'
   image_description?: string | null
 }
 

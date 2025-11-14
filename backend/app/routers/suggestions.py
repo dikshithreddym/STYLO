@@ -361,9 +361,9 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
         # ALWAYS try to add shoes for casual outfits
         # Try specific shoe types first, then any shoe by category
         if not (add_if_found("Sneakers") or add_if_found("Boots") or add_if_found("Loafers")):
-            # If no specific shoe type found, get any shoes from category
+            # If no specific shoe type found, get any footwear from category
             items = get_wardrobe_items(db)
-            shoe_items = [it for it in items if it.get("category") == "shoes" and it["id"] not in used]
+            shoe_items = [it for it in items if it.get("category") == "footwear" and it["id"] not in used]
             if shoe_items:
                 if colors:
                     color_matched = [it for it in shoe_items if _color_matches(it["color"], colors)]
@@ -417,17 +417,17 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
     # Shoes fallback preferring loafers/boots for formal/business, sneakers otherwise
     if occasion in ("formal", "business"):
         if not (add_if_found("Loafers") or add_if_found("Boots") or add_if_found("Sneakers")):
-            # Fallback to any shoes by category
+            # Fallback to any footwear by category
             items = get_wardrobe_items(db)
-            shoe_items = [it for it in items if it.get("category") == "shoes" and it["id"] not in used]
+            shoe_items = [it for it in items if it.get("category") == "footwear" and it["id"] not in used]
             if shoe_items:
                 result.append(shoe_items[0])
                 used.add(shoe_items[0]["id"])
-    elif not any(it.get("category") == "shoes" for it in result):
+    elif not any(it.get("category") == "footwear" for it in result):
         # For non-formal occasions, ensure shoes are added if not already
         if not (add_if_found("Sneakers") or add_if_found("Boots")):
             items = get_wardrobe_items(db)
-            shoe_items = [it for it in items if it.get("category") == "shoes" and it["id"] not in used]
+            shoe_items = [it for it in items if it.get("category") == "footwear" and it["id"] not in used]
             if shoe_items:
                 result.append(shoe_items[0])
                 used.add(shoe_items[0]["id"])
@@ -550,7 +550,7 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
     # Completeness
     has_top = "top" in cats or any(t in types for t in ["dress shirt", "t-shirt"])
     has_bottom = "bottom" in cats or "dress" in types
-    has_shoes = "shoes" in cats
+    has_shoes = "footwear" in cats
     has_accessories = "accessories" in cats
     if (has_top and has_bottom) or "dress" in types:
         score += 0.4
@@ -605,7 +605,7 @@ def generate_alternatives(occasion: str, weather: Optional[str], colors: List[st
             variations.append(v)
 
     # Try alternative shoes
-    current_shoes = next((x for x in base if x.get("category") == "shoes"), None)
+    current_shoes = next((x for x in base if x.get("category") == "footwear"), None)
     if current_shoes:
         alt_shoes_type = "Boots" if "Sneakers" in current_shoes["type"] else "Sneakers"
         alt_shoes = _pick(alt_shoes_type, colors, base_ids, "shoes", db, query_tokens)

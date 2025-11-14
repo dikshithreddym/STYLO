@@ -104,7 +104,7 @@ def generate_fallback_description(item_type: str, color: str, category: Optional
     descriptions = {
         'top': f"A {color} {item_type} that pairs well with various bottoms.",
         'bottom': f"Versatile {color} {item_type} suitable for different occasions.",
-        'shoes': f"Comfortable {color} {item_type} to complete your outfit.",
+        'footwear': f"Comfortable {color} {item_type} to complete your outfit.",
         'layer': f"A {color} {item_type} perfect for layering in cooler weather.",
         'one-piece': f"An elegant {color} {item_type} for a complete look.",
         'accessories': f"A stylish {color} {item_type} to complement your ensemble."
