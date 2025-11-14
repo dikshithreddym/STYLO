@@ -12,6 +12,7 @@ next_id = max(item["id"] for item in wardrobe_items) + 1
 
 @router.get("", response_model=List[WardrobeItem])
 async def get_wardrobe_items(
+    response: Response,
     q: Optional[str] = Query(None, description="Search query across type and color"),
     type: Optional[str] = Query(None, description="Filter by item type (exact match)"),
     color: Optional[str] = Query(None, description="Filter by color (partial match)"),
@@ -22,7 +23,6 @@ async def get_wardrobe_items(
     ),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(12, ge=1, le=100, description="Items per page"),
-    response: Response = None,
 ):
     """
     Get wardrobe items with optional filtering and sorting.
@@ -56,8 +56,8 @@ async def get_wardrobe_items(
     end = start + page_size
     sliced = items[start:end]
 
-    if response is not None:
-        response.headers["X-Total-Count"] = str(total)
+    # Always set total count header for pagination
+    response.headers["X-Total-Count"] = str(total)
 
     return sliced
 

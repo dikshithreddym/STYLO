@@ -281,19 +281,19 @@ export default function WardrobePage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1 border rounded disabled:opacity-50"
+                className="px-3 py-1 border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={page === 1}
               >Prev</button>
-              <span className="text-sm">Page {page}</span>
+              <span className="text-sm text-gray-700 font-medium">Page {page}</span>
               <button
                 onClick={() => setPage((p) => (p * pageSize < total ? p + 1 : p))}
-                className="px-3 py-1 border rounded disabled:opacity-50"
+                className="px-3 py-1 border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={page * pageSize >= total}
               >Next</button>
               <select
                 value={pageSize}
                 onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
-                className="ml-2 px-2 py-1 border rounded text-gray-900"
+                className="ml-2 px-2 py-1 border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 {[8,12,16,24].map(n => <option key={n} value={n}>{n}/page</option>)}
               </select>
