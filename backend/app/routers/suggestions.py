@@ -279,9 +279,26 @@ def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: 
     return candidates[0] if candidates else None
 
 
-def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: Session, query_tokens: List[str] = []) -> List[dict]:
+def _detect_activity(tokens: List[str]) -> Optional[str]:
+    """Detect activity context (e.g., walk, run, hike) to tune outfit."""
+    activity_map = {
+        "walk": {"walk", "walking"},
+        "run": {"run", "running", "jog", "jogging"},
+        "hike": {"hike", "hiking", "trail"},
+        "workout": {"workout", "gym", "exercise", "training"},
+        "sport": {"sport", "sports", "soccer", "basketball", "tennis"},
+    }
+    ts = set(tokens)
+    for name, keys in activity_map.items():
+        if ts & keys:
+            return name
+    return None
+
+
+def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: Session, query_tokens: List[str] = [], original_text: str = "") -> List[dict]:
     used: set[int] = set()
     result: List[dict] = []
+    activity = _detect_activity(query_tokens)
 
     def add_if_found(t: str, cat: Optional[str] = None):
         it = _pick(t, colors, used, cat, db, query_tokens)
@@ -412,31 +429,31 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                 result.append(shoe_items[0])
                 used.add(shoe_items[0]["id"])
 
-    # Add accessories if available (watches, belts, bags, etc.)
-    # Try to add one accessory item for any outfit
-    items = get_wardrobe_items(db)
-    accessory_candidates = [
-        it for it in items
-        if it.get("category") == "accessories" and it["id"] not in used
-    ]
-    if accessory_candidates:
-        # Use smart color-matching for accessories
-        if colors:
-            color_matched = [acc for acc in accessory_candidates if _color_matches(acc["color"], colors)]
-            if color_matched:
-                result.append(color_matched[0])
-                return result
-        
-        # If no color match, add first available accessory
-        if not any(it.get("category") == "accessories" for it in result):
-            result.append(accessory_candidates[0])
+    # Accessories: skip for movement activities (walk/run/hike/workout/sport) to keep practical
+    if activity is None:
+        items = get_wardrobe_items(db)
+        accessory_candidates = [
+            it for it in items
+            if it.get("category") == "accessories" and it["id"] not in used
+        ]
+        if accessory_candidates:
+            if colors:
+                color_matched = [acc for acc in accessory_candidates if _color_matches(acc["color"], colors)]
+                if color_matched and not any(it.get("category") == "accessories" for it in result):
+                    result.append(color_matched[0])
+            if not any(it.get("category") == "accessories" for it in result):
+                result.append(accessory_candidates[0])
 
     return result
 
 
-def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optional[str], colors: List[str], score: float, query_tokens: List[str] = []) -> str:
+def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optional[str], colors: List[str], score: float, query_tokens: List[str] = [], original_text: str = "") -> str:
     """Generate a detailed explanation for why this outfit was suggested"""
     parts = []
+    activity = _detect_activity(query_tokens)
+
+    if original_text:
+        parts.append(f"Prompt context: '{original_text.strip()}'.")
     
     # Occasion reasoning
     if occasion == "casual":
@@ -489,7 +506,13 @@ def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optiona
     
     if has_accessories:
         accessories = [it["type"] for it in items if it.get("category") == "accessories"]
-        parts.append(f"Added {', '.join(accessories)} to complete the look.")
+        if activity:
+            parts.append(f"(Accessories were minimized due to {activity} activity.)")
+        else:
+            parts.append(f"Added {', '.join(accessories)} to complete the look.")
+
+    if activity and not has_accessories:
+        parts.append(f"Skipped accessories to keep the outfit practical for a {activity}.")
     
     # Confidence note
     if score >= 0.8:
@@ -718,14 +741,14 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
     best_items, best_score = scored[0]
     
     # Generate intelligent rationale for the best outfit
-    best_rationale = generate_outfit_rationale(best_items, occasion, weather, colors, best_score, tokens)
+    best_rationale = generate_outfit_rationale(best_items, occasion, weather, colors, best_score, tokens, text)
     
     # Generate rationales for alternatives too
     alt_outfits = [
         Outfit(
             items=v, 
             score=s, 
-            rationale=generate_outfit_rationale(v, occasion, weather, colors, s, tokens)
+            rationale=generate_outfit_rationale(v, occasion, weather, colors, s, tokens, text)
         ) 
         for v, s in scored[1:]
     ]
