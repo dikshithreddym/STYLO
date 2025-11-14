@@ -1,32 +1,46 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
+from sqlalchemy.orm import Session
 from app.schemas import WardrobeItem, SuggestRequest, SuggestResponse, Outfit
+from app.database import get_db
+from app import models
 import os
 
 router = APIRouter()
 
-# Import shared wardrobe items accessor
-def get_wardrobe_items():
-    from app.routers.wardrobe import wardrobe_items
-    return wardrobe_items
+# Get wardrobe items from database
+def get_wardrobe_items(db: Session) -> List[dict]:
+    items = db.query(models.WardrobeItem).all()
+    return [item.to_dict() for item in items]
 
 COLOR_WORDS = {
     "black", "white", "navy", "blue", "green", "olive", "grey", "gray",
-    "beige", "khaki", "burgundy", "charcoal", "dark", "light"
+    "beige", "khaki", "burgundy", "charcoal", "dark", "light", "brown",
+    "red", "pink", "yellow", "orange", "purple", "silver", "gold"
 }
 
 OCCASION_KEYWORDS = {
     "formal": {"formal", "wedding", "ceremony", "black tie", "reception"},
     "business": {"business", "office", "interview", "meeting", "work"},
     "smart casual": {"smart", "smart casual", "semi-formal"},
-    "party": {"party", "night out", "club", "birthday"},
-    "casual": {"casual", "hangout", "weekend", "everyday", "relaxed"},
+    "party": {"party", "night out", "club", "birthday", "celebration"},
+    "casual": {"casual", "hangout", "weekend", "everyday", "relaxed", "any"},
 }
 
 WEATHER_KEYWORDS = {
     "cold": {"cold", "winter", "chilly", "freezing"},
     "hot": {"hot", "summer", "warm", "heat"},
     "rain": {"rain", "rainy", "wet"},
+}
+
+# Item type keywords to help understand queries
+ITEM_TYPE_KEYWORDS = {
+    "ring": {"ring", "rings"},
+    "watch": {"watch", "watches"},
+    "belt": {"belt", "belts"},
+    "bag": {"bag", "bags", "handbag", "purse"},
+    "scarf": {"scarf", "scarves"},
+    "sunglasses": {"sunglasses", "shades", "glasses"},
 }
 
 
@@ -61,9 +75,9 @@ def _detect_weather(tokens: List[str]) -> Optional[str]:
     return None
 
 
-def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: Optional[str] = None) -> Optional[dict]:
+def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: Optional[str], db: Session) -> Optional[dict]:
     # Try exact type match first, prefer preferred colors
-    items = get_wardrobe_items()
+    items = get_wardrobe_items(db)
     candidates = [
         it for it in items
         if it["type"].lower() == preferred_type.lower()
@@ -78,7 +92,7 @@ def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: 
     if candidates:
         return candidates[0]
     # Try contains-type match as fallback
-    items = get_wardrobe_items()
+    items = get_wardrobe_items(db)
     candidates = [
         it for it in items
         if preferred_type.lower() in it["type"].lower()
@@ -93,12 +107,12 @@ def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: 
     return candidates[0] if candidates else None
 
 
-def build_outfit(occasion: str, weather: Optional[str], colors: List[str]) -> List[dict]:
+def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: Session) -> List[dict]:
     used: set[int] = set()
     result: List[dict] = []
 
     def add_if_found(t: str, cat: Optional[str] = None):
-        it = _pick(t, colors, used, category=cat)
+        it = _pick(t, colors, used, cat, db)
         if it:
             used.add(it["id"])
             result.append(it)
@@ -135,7 +149,7 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str]) -> Li
 
     # Add accessories if available (watches, belts, bags, etc.)
     # Try to add one accessory item for any outfit
-    items = get_wardrobe_items()
+    items = get_wardrobe_items(db)
     accessory_candidates = [
         it for it in items
         if it.get("category") == "accessories" and it["id"] not in used
@@ -197,19 +211,19 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
     return min(score, 1.0)
 
 
-def generate_alternatives(occasion: str, weather: Optional[str], colors: List[str], limit: int) -> List[List[dict]]:
+def generate_alternatives(occasion: str, weather: Optional[str], colors: List[str], limit: int, db: Session) -> List[List[dict]]:
     # Produce simple variations by toggling bottoms and shoes when possible
-    base = build_outfit(occasion, weather, colors)
+    base = build_outfit(occasion, weather, colors, db)
     variations = [base]
 
     # Try alternative bottom if available
-    alt_bottom = _pick("Chinos" if any(x["type"] == "Jeans" for x in base) else "Jeans", colors, set(), category="bottom")
+    alt_bottom = _pick("Chinos" if any(x["type"] == "Jeans" for x in base) else "Jeans", colors, set(), "bottom", db)
     if alt_bottom:
         v = [it for it in base if it.get("category") != "bottom"] + [alt_bottom]
         variations.append(v)
 
     # Try alternative shoes
-    alt_shoes = _pick("Boots" if any(x["type"] == "Sneakers" for x in base) else "Sneakers", colors, set(), category="shoes")
+    alt_shoes = _pick("Boots" if any(x["type"] == "Sneakers" for x in base) else "Sneakers", colors, set(), "shoes", db)
     if alt_shoes:
         v = [it for it in base if it.get("category") != "shoes"] + [alt_shoes]
         variations.append(v)
@@ -228,10 +242,37 @@ def generate_alternatives(occasion: str, weather: Optional[str], colors: List[st
 
 
 @router.post("", response_model=SuggestResponse)
-async def suggest_outfit(payload: SuggestRequest) -> SuggestResponse:
+async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db)) -> SuggestResponse:
     text = payload.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
+
+    # Check if wardrobe has enough items
+    available_items = get_wardrobe_items(db)
+    if len(available_items) == 0:
+        raise HTTPException(
+            status_code=400, 
+            detail="Your wardrobe is empty. Please add some clothing items first."
+        )
+    
+    # Check if wardrobe has basic items needed for an outfit
+    categories = {item.get("category") for item in available_items}
+    has_top_or_dress = any(
+        item.get("category") in ["top", "one-piece"] or 
+        any(word in item["type"].lower() for word in ["shirt", "dress", "top", "sweater", "jacket"])
+        for item in available_items
+    )
+    has_bottom = any(
+        item.get("category") == "bottom" or 
+        any(word in item["type"].lower() for word in ["jeans", "pants", "chinos", "skirt"])
+        for item in available_items
+    )
+    
+    if not has_top_or_dress and not has_bottom:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not enough clothing items to create an outfit. You have {len(available_items)} item(s): {', '.join(item['type'] for item in available_items)}. Please add tops, bottoms, or complete outfits."
+        )
 
     tokens = _text_tokens(text)
     colors = _preferred_colors(tokens)
@@ -247,11 +288,27 @@ async def suggest_outfit(payload: SuggestRequest) -> SuggestResponse:
         raise HTTPException(status_code=501, detail="ML service integration not yet implemented")
 
     # Rules engine
-    variants = generate_alternatives(occasion, weather, colors, payload.limit)
+    variants = generate_alternatives(occasion, weather, colors, payload.limit, db)
+    
+    # If no valid outfits generated, provide helpful message
+    if not variants or all(len(v) == 0 for v in variants):
+        available_types = ', '.join(set(item['type'] for item in available_items))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot create an outfit with available items. Your wardrobe contains: {available_types}. Try adding more clothing pieces like tops, bottoms, or shoes."
+        )
+    
     scored = [
         (v, outfit_score(v, occasion, weather, colors))
-        for v in variants
+        for v in variants if len(v) > 0
     ]
+    
+    if not scored:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to generate outfit suggestions. Please add more clothing items to your wardrobe."
+        )
+    
     scored.sort(key=lambda x: x[1], reverse=True)
     best_items, best_score = scored[0]
     alt_outfits = [Outfit(items=v, score=s, rationale=None) for v, s in scored[1:]]

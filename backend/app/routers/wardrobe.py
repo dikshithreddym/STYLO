@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from typing import List, Optional
+from sqlalchemy.orm import Session
 from app.schemas import WardrobeItem, WardrobeItemCreate
-from app.data.wardrobe_data import DUMMY_WARDROBE_ITEMS
+from app.database import get_db
+from app import models
 from app.utils.cloudinary_helper import (
     upload_image_to_cloudinary,
     delete_image_from_cloudinary,
@@ -15,18 +17,15 @@ import cloudinary.uploader
 
 router = APIRouter()
 
-# In-memory wardrobe state (mutable during session)
-wardrobe_items = [dict(item) for item in DUMMY_WARDROBE_ITEMS]
-next_id = max(item["id"] for item in wardrobe_items) + 1
-
 
 @router.get("", response_model=List[WardrobeItem])
 async def get_wardrobe_items(
     response: Response,
+    db: Session = Depends(get_db),
     q: Optional[str] = Query(None, description="Search query across type and color"),
     type: Optional[str] = Query(None, description="Filter by item type (exact match)"),
     color: Optional[str] = Query(None, description="Filter by color (partial match)"),
-    category: Optional[str] = Query(None, description="Filter by category (top/bottom/shoes/layer/one-piece)"),
+    category: Optional[str] = Query(None, description="Filter by category (top/bottom/shoes/layer/one-piece/accessories)"),
     sort: Optional[str] = Query(
         None,
         description="Sort by field. Use prefix '-' for descending. Allowed: id, type, color",
@@ -37,21 +36,24 @@ async def get_wardrobe_items(
     """
     Get wardrobe items with optional filtering and sorting.
     """
-    items = wardrobe_items.copy()
+    query = db.query(models.WardrobeItem)
 
     # Filtering
     if q:
-        q_lower = q.lower()
-        items = [
-            it for it in items if q_lower in it["type"].lower() or q_lower in it["color"].lower()
-        ]
+        q_lower = f"%{q.lower()}%"
+        query = query.filter(
+            (models.WardrobeItem.type.ilike(q_lower)) |
+            (models.WardrobeItem.color.ilike(q_lower))
+        )
     if type:
-        items = [it for it in items if it["type"].lower() == type.lower()]
+        query = query.filter(models.WardrobeItem.type.ilike(type))
     if color:
-        color_lower = color.lower()
-        items = [it for it in items if color_lower in it["color"].lower()]
+        query = query.filter(models.WardrobeItem.color.ilike(f"%{color}%"))
     if category:
-        items = [it for it in items if it.get("category", "").lower() == category.lower()]
+        query = query.filter(models.WardrobeItem.category.ilike(category))
+
+    # Get total count before pagination
+    total = query.count()
 
     # Sorting
     if sort:
@@ -59,17 +61,21 @@ async def get_wardrobe_items(
         reverse = sort.startswith("-")
         if key not in {"id", "type", "color", "category"}:
             raise HTTPException(status_code=400, detail="Invalid sort field")
-        items.sort(key=lambda x: x[key], reverse=reverse)
+        
+        sort_column = getattr(models.WardrobeItem, key)
+        if reverse:
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
 
-    total = len(items)
-    start = (page - 1) * page_size
-    end = start + page_size
-    sliced = items[start:end]
+    # Pagination
+    offset = (page - 1) * page_size
+    items = query.offset(offset).limit(page_size).all()
 
-    # Always set total count header for pagination
+    # Set total count header for pagination
     response.headers["X-Total-Count"] = str(total)
 
-    return sliced
+    return [item.to_dict() for item in items]
 
 
 # IMPORTANT: Specific routes must come BEFORE parameterized routes like /{item_id}
@@ -134,23 +140,21 @@ async def cloudinary_test():
 
 
 @router.get("/{item_id}", response_model=WardrobeItem)
-async def get_wardrobe_item(item_id: int):
+async def get_wardrobe_item(item_id: int, db: Session = Depends(get_db)):
     """
     Get a specific wardrobe item by ID
     """
-    item = next((item for item in wardrobe_items if item["id"] == item_id), None)
+    item = db.query(models.WardrobeItem).filter(models.WardrobeItem.id == item_id).first()
     if item:
-        return item
+        return item.to_dict()
     raise HTTPException(status_code=404, detail="Item not found")
 
 
 @router.post("", response_model=WardrobeItem, status_code=201)
-async def create_wardrobe_item(payload: WardrobeItemCreate):
+async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depends(get_db)):
     """
     Add a new item to the wardrobe
     """
-    global next_id
-    
     # Handle image upload to Cloudinary if enabled
     image_url = payload.image_url
     cloudinary_public_id = None
@@ -169,32 +173,35 @@ async def create_wardrobe_item(payload: WardrobeItemCreate):
             # If Cloudinary upload fails, fall back to base64 storage
             pass
     
-    new_item = {
-        "id": next_id,
-        "type": payload.type,
-        "color": payload.color,
-        "image_url": image_url,
-        "category": payload.category,
-        "cloudinary_id": cloudinary_public_id,
-    }
-    wardrobe_items.append(new_item)
-    next_id += 1
-    return new_item
+    new_item = models.WardrobeItem(
+        type=payload.type,
+        color=payload.color,
+        image_url=image_url,
+        category=payload.category,
+        cloudinary_id=cloudinary_public_id,
+    )
+    
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    
+    return new_item.to_dict()
 
 
 @router.delete("/{item_id}", status_code=204)
-async def delete_wardrobe_item(item_id: int):
+async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db)):
     """
     Delete a wardrobe item by ID
     """
-    global wardrobe_items
-    item = next((it for it in wardrobe_items if it["id"] == item_id), None)
+    item = db.query(models.WardrobeItem).filter(models.WardrobeItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     
     # Delete from Cloudinary if it was uploaded there
-    if item.get("cloudinary_id"):
-        await delete_image_from_cloudinary(item["cloudinary_id"])
+    if item.cloudinary_id:
+        await delete_image_from_cloudinary(item.cloudinary_id)
     
-    wardrobe_items = [it for it in wardrobe_items if it["id"] != item_id]
+    db.delete(item)
+    db.commit()
+    
     return Response(status_code=204)
