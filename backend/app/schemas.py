@@ -14,6 +14,7 @@ class WardrobeItemBase(BaseModel):
     category: Optional[Literal['top','bottom','shoes','layer','one-piece','accessories']] = Field(
         None, description="Categorization for outfit building"
     )
+    image_description: Optional[str] = Field(None, description="AI-generated description of the item")
 
 
 class WardrobeItem(WardrobeItemBase):

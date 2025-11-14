@@ -6,6 +6,7 @@ export interface WardrobeItem {
   color: string
   image_url: string | null
   category?: 'top' | 'bottom' | 'shoes' | 'layer' | 'one-piece' | 'accessories'
+  image_description?: string | null
 }
 
 // Wardrobe API endpoints
