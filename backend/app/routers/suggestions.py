@@ -97,8 +97,8 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str]) -> Li
     used: set[int] = set()
     result: List[dict] = []
 
-    def add_if_found(t: str):
-        it = _pick(t, colors, used)
+    def add_if_found(t: str, cat: Optional[str] = None):
+        it = _pick(t, colors, used, category=cat)
         if it:
             used.add(it["id"])
             result.append(it)
@@ -133,6 +133,27 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str]) -> Li
     else:
         add_if_found("Sneakers") or add_if_found("Boots")
 
+    # Add accessories if available (watches, belts, bags, etc.)
+    # Try to add one accessory item for any outfit
+    items = get_wardrobe_items()
+    accessory_candidates = [
+        it for it in items
+        if it.get("category") == "accessories" and it["id"] not in used
+    ]
+    if accessory_candidates:
+        # Prefer color-matching accessories
+        if colors:
+            for c in colors:
+                for acc in accessory_candidates:
+                    if c in acc["color"].lower():
+                        result.append(acc)
+                        break
+                if any(it.get("category") == "accessories" for it in result):
+                    break
+        # If no color match, add first available accessory
+        if not any(it.get("category") == "accessories" for it in result):
+            result.append(accessory_candidates[0])
+
     return result
 
 
@@ -147,10 +168,13 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
     has_top = "top" in cats or any(t in types for t in ["dress shirt", "t-shirt"])
     has_bottom = "bottom" in cats or "dress" in types
     has_shoes = "shoes" in cats
+    has_accessories = "accessories" in cats
     if (has_top and has_bottom) or "dress" in types:
         score += 0.4
     if has_shoes:
         score += 0.2
+    if has_accessories:
+        score += 0.05  # Small bonus for including accessories
 
     # Occasion match
     if occasion in ("formal", "business") and ("blazer" in types or "dress shirt" in types):
@@ -168,7 +192,7 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
 
     # Color preference
     if colors_l and any(any(c in it["color"].lower() for c in colors_l) for it in items):
-        score += 0.1
+        score += 0.05
 
     return min(score, 1.0)
 
