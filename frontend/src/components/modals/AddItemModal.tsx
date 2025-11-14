@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { wardrobeAPI, WardrobeItem } from '@/lib/api'
@@ -46,16 +46,34 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
         video: { facingMode: 'environment' },
         audio: false 
       })
+      
       setStream(mediaStream)
       setCameraActive(true)
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream
-      }
     } catch (err) {
-      console.error(err)
+      console.error('❌ Camera access failed:', err)
       setError('Failed to access camera. Please check permissions.')
     }
   }
+
+  // Attach stream to video element when both are available
+  useEffect(() => {
+    if (stream && videoRef.current && cameraActive) {
+      videoRef.current.srcObject = stream
+      
+      const videoElement = videoRef.current
+      
+      const handleLoadedMetadata = () => {
+        videoElement.play().catch((err) => console.error('Play failed:', err))
+      }
+      
+      videoElement.addEventListener('loadedmetadata', handleLoadedMetadata)
+      
+      // Cleanup
+      return () => {
+        videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      }
+    }
+  }, [stream, cameraActive])
 
   const stopCamera = () => {
     if (stream) {
@@ -194,6 +212,7 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
                     ref={videoRef}
                     autoPlay
                     playsInline
+                    muted
                     className="w-full rounded-lg bg-black"
                   />
                   <div className="flex gap-2">
