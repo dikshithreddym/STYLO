@@ -6,6 +6,7 @@ import Card from '@/components/ui/Card'
 import Image from 'next/image'
 import { suggestionsAPI, WardrobeItem, Outfit } from '@/lib/api'
 import { saveSuggestHistory } from '@/lib/storage'
+import { getColorHex } from '@/lib/colors'
 
 interface SuggestResult {
   occasion: string
@@ -125,7 +126,7 @@ export default function SuggestPage() {
                     <div className="p-4">
                       <h3 className="font-semibold text-lg text-gray-900">{item.type}</h3>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="inline-block w-3 h-3 rounded-full border border-gray-300 shadow-sm" style={{ backgroundColor: item.color.toLowerCase() }}></span>
+                        <span className="inline-block w-3 h-3 rounded-full border border-gray-300 shadow-sm" style={{ backgroundColor: getColorHex(item.color) }}></span>
                         <p className="text-gray-600 text-sm">{item.color}</p>
                       </div>
                       {item.category && <span className="inline-block mt-2 px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-lg font-medium">{item.category}</span>}
@@ -154,7 +155,7 @@ export default function SuggestPage() {
                       <div className="grid grid-cols-2 gap-3 p-4">
                         {alt.items.map((it) => (
                           <div key={it.id} className="flex items-start gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                            <div className="w-2.5 h-2.5 mt-1.5 rounded-full border border-gray-300 shadow-sm flex-shrink-0" style={{ backgroundColor: it.color.toLowerCase() }}></div>
+                            <div className="w-2.5 h-2.5 mt-1.5 rounded-full border border-gray-300 shadow-sm flex-shrink-0" style={{ backgroundColor: getColorHex(it.color) }}></div>
                             <div className="text-sm min-w-0">
                               <div className="font-medium text-gray-900 truncate">{it.type}</div>
                               <div className="text-gray-600 text-xs truncate">{it.color}</div>

@@ -14,9 +14,29 @@ def get_wardrobe_items(db: Session) -> List[dict]:
     return [item.to_dict() for item in items]
 
 COLOR_WORDS = {
+    # Basic colors
     "black", "white", "navy", "blue", "green", "olive", "grey", "gray",
     "beige", "khaki", "burgundy", "charcoal", "dark", "light", "brown",
-    "red", "pink", "yellow", "orange", "purple", "silver", "gold"
+    "red", "pink", "yellow", "orange", "purple", "silver", "gold",
+    # Denim variations
+    "denim", "light", "medium", "dark",
+    # Patterns and special colors
+    "camo", "camouflage", "tan", "cream", "ivory",
+    "maroon", "teal", "turquoise", "lavender", "mint", "peach", "coral",
+    # Shades
+    "pale", "bright", "deep", "pastel", "neon", "faded"
+}
+
+# Color synonyms and variations for better matching
+COLOR_SYNONYMS = {
+    "navy": ["navy blue", "dark blue"],
+    "gray": ["grey", "charcoal"],
+    "beige": ["tan", "cream", "khaki"],
+    "brown": ["chocolate", "coffee", "tan"],
+    "white": ["ivory", "cream", "off-white"],
+    "black": ["jet black", "ebony"],
+    "camo": ["camouflage", "brown camo", "green camo", "desert camo"],
+    "denim": ["jean", "jeans blue", "medium light"],
 }
 
 OCCASION_KEYWORDS = {
@@ -81,7 +101,7 @@ def _search_wardrobe(text: str, db: Session) -> dict:
     
     # Extract item types and colors from query
     search_types = []
-    search_colors = []
+    search_colors = _preferred_colors(tokens)  # Use the improved color detection
     
     # Common item types
     item_keywords = {
@@ -103,16 +123,11 @@ def _search_wardrobe(text: str, db: Session) -> dict:
         if any(kw in tokens for kw in keywords):
             search_types.append(item_type)
     
-    # Search for colors
-    for token in tokens:
-        if token in COLOR_WORDS:
-            search_colors.append(token)
-    
-    # Filter items
+    # Filter items using smart color matching
     matching_items = []
     for item in items:
         type_match = not search_types or any(st in item["type"].lower() for st in search_types)
-        color_match = not search_colors or any(sc in item["color"].lower() for sc in search_colors)
+        color_match = _color_matches(item["color"], search_colors)
         
         if type_match and color_match:
             matching_items.append(item)
@@ -132,7 +147,45 @@ def _preferred_colors(tokens: List[str]) -> List[str]:
     for t in tokens:
         if t in COLOR_WORDS and t not in found:
             found.append(t)
+    
+    # Also check for color synonyms in the original text
+    # This helps match multi-word colors like "navy blue"
+    text = " ".join(tokens)
+    for base_color, variations in COLOR_SYNONYMS.items():
+        for variation in variations:
+            if variation in text and base_color not in found:
+                found.append(base_color)
+                break
+    
     return found
+
+
+def _color_matches(item_color: str, preferred_colors: List[str]) -> bool:
+    """Check if item color matches any of the preferred colors"""
+    if not preferred_colors:
+        return True
+    
+    item_color_lower = item_color.lower()
+    
+    for pref_color in preferred_colors:
+        # Direct substring match
+        if pref_color in item_color_lower:
+            return True
+        
+        # Check synonyms (e.g., "gray" matches "grey", "charcoal")
+        if pref_color in COLOR_SYNONYMS:
+            for synonym in COLOR_SYNONYMS[pref_color]:
+                if synonym in item_color_lower:
+                    return True
+        
+        # Reverse check: if item color contains synonym that maps to preferred color
+        for base_color, synonyms in COLOR_SYNONYMS.items():
+            if base_color == pref_color:
+                for synonym in synonyms:
+                    if synonym in item_color_lower:
+                        return True
+    
+    return False
 
 
 def _detect_occasion(tokens: List[str]) -> str:
@@ -161,26 +214,30 @@ def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: 
         and it["id"] not in used_ids
         and (category is None or it.get("category") == category)
     ]
-    if colors:
-        for c in colors:
-            for it in candidates:
-                if c in it["color"].lower():
-                    return it
+    
+    # Use smart color matching instead of simple substring
+    if colors and candidates:
+        color_matched = [it for it in candidates if _color_matches(it["color"], colors)]
+        if color_matched:
+            return color_matched[0]
+    
     if candidates:
         return candidates[0]
+    
     # Try contains-type match as fallback
-    items = get_wardrobe_items(db)
     candidates = [
         it for it in items
         if preferred_type.lower() in it["type"].lower()
         and it["id"] not in used_ids
         and (category is None or it.get("category") == category)
     ]
-    if colors:
-        for c in colors:
-            for it in candidates:
-                if c in it["color"].lower():
-                    return it
+    
+    # Again use smart color matching
+    if colors and candidates:
+        color_matched = [it for it in candidates if _color_matches(it["color"], colors)]
+        if color_matched:
+            return color_matched[0]
+    
     return candidates[0] if candidates else None
 
 
@@ -232,15 +289,13 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
         if it.get("category") == "accessories" and it["id"] not in used
     ]
     if accessory_candidates:
-        # Prefer color-matching accessories
+        # Use smart color-matching for accessories
         if colors:
-            for c in colors:
-                for acc in accessory_candidates:
-                    if c in acc["color"].lower():
-                        result.append(acc)
-                        break
-                if any(it.get("category") == "accessories" for it in result):
-                    break
+            color_matched = [acc for acc in accessory_candidates if _color_matches(acc["color"], colors)]
+            if color_matched:
+                result.append(color_matched[0])
+                return result
+        
         # If no color match, add first available accessory
         if not any(it.get("category") == "accessories" for it in result):
             result.append(accessory_candidates[0])
@@ -281,8 +336,8 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
     if weather == "hot" and not any(t in types for t in ["jacket", "sweater", "cardigan"]):
         score += 0.05
 
-    # Color preference
-    if colors_l and any(any(c in it["color"].lower() for c in colors_l) for it in items):
+    # Color preference - use smart color matching
+    if colors and any(_color_matches(it["color"], colors) for it in items):
         score += 0.05
 
     return min(score, 1.0)

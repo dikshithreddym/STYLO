@@ -6,6 +6,7 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { wardrobeAPI } from '@/lib/api'
 import { getFavorites, toggleFavorite } from '@/lib/storage'
+import { getColorHex } from '@/lib/colors'
 import AddItemModal from '@/components/modals/AddItemModal'
 import HealthStatus from '@/components/system/HealthStatus'
 
@@ -351,7 +352,7 @@ export default function WardrobePage() {
                   <h3 className="font-semibold text-lg text-gray-900 mb-1">{item.type}</h3>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="inline-block w-3 h-3 rounded-full border border-gray-300 shadow-sm" 
-                          style={{ backgroundColor: item.color.toLowerCase() }}
+                          style={{ backgroundColor: getColorHex(item.color) }}
                           title={item.color}
                     ></span>
                     <p className="text-gray-600 text-sm">{item.color}</p>
