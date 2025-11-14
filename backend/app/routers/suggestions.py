@@ -466,8 +466,7 @@ def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optiona
     parts = []
     activity = _detect_activity(query_tokens)
 
-    if original_text:
-        parts.append(f"Prompt context: '{original_text.strip()}'.")
+    # Do not echo the prompt back; focus on reasoning only
     
     # Occasion reasoning
     if occasion == "casual":
