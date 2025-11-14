@@ -222,6 +222,52 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
     return new_item.to_dict()
 
 
+@router.patch("/{item_id}", response_model=WardrobeItemSchema)
+async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Session = Depends(get_db)):
+    """
+    Update a wardrobe item by ID
+    """
+    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    # Update fields
+    item.type = payload.type
+    item.color = payload.color
+    item.category = payload.category
+    
+    # Update image if provided
+    if payload.image_url and payload.image_url != item.image_url:
+        # Handle new image upload to Cloudinary if enabled
+        image_url = payload.image_url
+        cloudinary_public_id = item.cloudinary_id
+        
+        if image_url and settings.USE_CLOUDINARY and settings.cloudinary_configured:
+            try:
+                # Delete old image if exists
+                if item.cloudinary_id:
+                    await delete_image_from_cloudinary(item.cloudinary_id)
+                
+                # Upload new image
+                upload_result = await upload_image_to_cloudinary(
+                    image_data=image_url,
+                    tags=["wardrobe", payload.type.lower(), payload.category] if payload.category else ["wardrobe", payload.type.lower()]
+                )
+                if upload_result.get("uploaded"):
+                    image_url = upload_result["url"]
+                    cloudinary_public_id = upload_result.get("public_id")
+            except HTTPException:
+                pass
+        
+        item.image_url = image_url
+        item.cloudinary_id = cloudinary_public_id
+    
+    db.commit()
+    db.refresh(item)
+    
+    return item.to_dict()
+
+
 @router.delete("/{item_id}", status_code=204)
 async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db)):
     """
