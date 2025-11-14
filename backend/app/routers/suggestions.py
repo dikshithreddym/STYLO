@@ -342,8 +342,23 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                     used.add(bottom_items[0]["id"])
         
         # ALWAYS try to add shoes for casual outfits
-        if not add_if_found("Sneakers"):
-            add_if_found("Boots") or add_if_found("Loafers")
+        # Try specific shoe types first, then any shoe by category
+        if not (add_if_found("Sneakers") or add_if_found("Boots") or add_if_found("Loafers")):
+            # If no specific shoe type found, get any shoes from category
+            items = get_wardrobe_items(db)
+            shoe_items = [it for it in items if it.get("category") == "shoes" and it["id"] not in used]
+            if shoe_items:
+                if colors:
+                    color_matched = [it for it in shoe_items if _color_matches(it["color"], colors)]
+                    if color_matched:
+                        result.append(color_matched[0])
+                        used.add(color_matched[0]["id"])
+                    else:
+                        result.append(shoe_items[0])
+                        used.add(shoe_items[0]["id"])
+                else:
+                    result.append(shoe_items[0])
+                    used.add(shoe_items[0]["id"])
 
     # Weather layers - CRITICAL: Prioritize for cold/rain weather
     if weather == "cold":
@@ -381,9 +396,21 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
 
     # Shoes fallback preferring loafers/boots for formal/business, sneakers otherwise
     if occasion in ("formal", "business"):
-        add_if_found("Loafers") or add_if_found("Boots") or add_if_found("Sneakers")
-    else:
-        add_if_found("Sneakers") or add_if_found("Boots")
+        if not (add_if_found("Loafers") or add_if_found("Boots") or add_if_found("Sneakers")):
+            # Fallback to any shoes by category
+            items = get_wardrobe_items(db)
+            shoe_items = [it for it in items if it.get("category") == "shoes" and it["id"] not in used]
+            if shoe_items:
+                result.append(shoe_items[0])
+                used.add(shoe_items[0]["id"])
+    elif not any(it.get("category") == "shoes" for it in result):
+        # For non-formal occasions, ensure shoes are added if not already
+        if not (add_if_found("Sneakers") or add_if_found("Boots")):
+            items = get_wardrobe_items(db)
+            shoe_items = [it for it in items if it.get("category") == "shoes" and it["id"] not in used]
+            if shoe_items:
+                result.append(shoe_items[0])
+                used.add(shoe_items[0]["id"])
 
     # Add accessories if available (watches, belts, bags, etc.)
     # Try to add one accessory item for any outfit
