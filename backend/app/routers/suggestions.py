@@ -429,20 +429,34 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                 result.append(shoe_items[0])
                 used.add(shoe_items[0]["id"])
 
-    # Accessories: skip for movement activities (walk/run/hike/workout/sport) to keep practical
-    if activity is None:
-        items = get_wardrobe_items(db)
+    # Accessories handling: for active contexts keep functional items (exclude jewelry like rings)
+    items = get_wardrobe_items(db)
+    if activity:
+        functional_keywords = {"watch", "belt", "bag", "backpack", "waist bag", "fanny pack"}
+        cold_extras = {"scarf", "beanie", "gloves"} if weather == "cold" else set()
+        accessory_candidates = [
+            it for it in items
+            if it.get("category") == "accessories"
+            and it["id"] not in used
+            and (
+                any(k in it["type"].lower() for k in functional_keywords)
+                or any(k in it["type"].lower() for k in cold_extras)
+            )
+            and not ("ring" in it["type"].lower() or "necklace" in it["type"].lower())
+        ]
+    else:
         accessory_candidates = [
             it for it in items
             if it.get("category") == "accessories" and it["id"] not in used
         ]
-        if accessory_candidates:
-            if colors:
-                color_matched = [acc for acc in accessory_candidates if _color_matches(acc["color"], colors)]
-                if color_matched and not any(it.get("category") == "accessories" for it in result):
-                    result.append(color_matched[0])
-            if not any(it.get("category") == "accessories" for it in result):
-                result.append(accessory_candidates[0])
+
+    if accessory_candidates:
+        if colors:
+            color_matched = [acc for acc in accessory_candidates if _color_matches(acc["color"], colors)]
+            if color_matched and not any(it.get("category") == "accessories" for it in result):
+                result.append(color_matched[0])
+        if not any(it.get("category") == "accessories" for it in result):
+            result.append(accessory_candidates[0])
 
     return result
 
@@ -505,14 +519,14 @@ def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optiona
     has_layer = "layer" in categories
     
     if has_accessories:
-        accessories = [it["type"] for it in items if it.get("category") == "accessories"]
+        accessories = [it for it in items if it.get("category") == "accessories"]
+        names = ", ".join(a["type"] for a in accessories)
         if activity:
-            parts.append(f"(Accessories were minimized due to {activity} activity.)")
+            parts.append(f"Included functional accessory: {names} for a {activity} context (avoided jewelry like rings).")
         else:
-            parts.append(f"Added {', '.join(accessories)} to complete the look.")
-
-    if activity and not has_accessories:
-        parts.append(f"Skipped accessories to keep the outfit practical for a {activity}.")
+            parts.append(f"Added {names} to complete the look.")
+    elif activity:
+        parts.append(f"No suitable functional accessories available for a {activity}; omitted decorative jewelry.")
     
     # Confidence note
     if score >= 0.8:
