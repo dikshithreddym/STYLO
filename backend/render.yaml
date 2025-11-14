@@ -1,9 +1,14 @@
 # Render deployment configuration
 # This file tells Render how to build and run your application
 
+# Python version (use 3.11 for better binary wheel support)
+python:
+  version: "3.11"
+
 # Build command (runs once during deployment)
 build:
-  - pip install -r requirements.txt
+  - chmod +x build.sh
+  - ./build.sh
 
 # Start command (runs to keep your service running)
 start:
