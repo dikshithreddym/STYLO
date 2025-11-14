@@ -65,10 +65,31 @@ async def trigger_backfill():
     """Admin endpoint to trigger image description backfill for existing items"""
     try:
         from backfill_image_descriptions import backfill_descriptions
-        await backfill_descriptions()
-        return {"status": "success", "message": "Backfill completed successfully"}
+        import sys
+        from io import StringIO
+        
+        # Capture output
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+        
+        try:
+            await backfill_descriptions()
+        finally:
+            sys.stdout = old_stdout
+        
+        output = captured_output.getvalue()
+        return {
+            "status": "success", 
+            "message": "Backfill completed successfully",
+            "output": output
+        }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        import traceback
+        return {
+            "status": "error", 
+            "message": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 # Include routers
 app.include_router(wardrobe.router, prefix="/wardrobe", tags=["wardrobe"])
