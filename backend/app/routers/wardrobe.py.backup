@@ -2,16 +2,6 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from typing import List, Optional
 from app.schemas import WardrobeItem, WardrobeItemCreate
 from app.data.wardrobe_data import DUMMY_WARDROBE_ITEMS
-from app.utils.cloudinary_helper import (
-    upload_image_to_cloudinary,
-    delete_image_from_cloudinary,
-    get_cloudinary_status,
-    build_image_url,
-    initialize_cloudinary,
-)
-from app.config import settings
-import cloudinary
-import cloudinary.uploader
 
 router = APIRouter()
 
@@ -72,67 +62,6 @@ async def get_wardrobe_items(
     return sliced
 
 
-# IMPORTANT: Specific routes must come BEFORE parameterized routes like /{item_id}
-@router.get("/cloudinary-status")
-async def cloudinary_status():
-    """
-    Check Cloudinary configuration status
-    """
-    return get_cloudinary_status()
-
-
-@router.post("/cloudinary-test")
-async def cloudinary_test():
-    """Server-side emulation of the provided JS snippet.
-
-    - Uploads a demo image by URL with a fixed public_id
-    - Returns upload result and two transformed URLs (optimize + auto-crop)
-    """
-    status = get_cloudinary_status()
-    if not status["enabled"] or not status["configured"]:
-        raise HTTPException(status_code=400, detail="Cloudinary not enabled/configured")
-
-    # Initialize Cloudinary
-    initialize_cloudinary()
-
-    # Upload the demo image (idempotent: reusing public_id overwrites/updates)
-    demo_url = "https://res.cloudinary.com/demo/image/upload/getting-started/shoes.jpg"
-    public_id = f"{status['folder']}/demo_shoes"
-
-    try:
-        upload_result = cloudinary.uploader.upload(
-            demo_url,
-            public_id=public_id,
-            overwrite=True,
-            resource_type="image",
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
-
-    # Build optimized and auto-crop URLs (like the JS example)
-    optimize_url = build_image_url(public_id, fetch_format="auto", quality="auto")
-    auto_crop_url = build_image_url(
-        public_id,
-        crop="auto",
-        gravity="auto",
-        width=500,
-        height=500,
-    )
-
-    return {
-        "upload": {
-            "public_id": upload_result.get("public_id"),
-            "url": upload_result.get("secure_url"),
-            "width": upload_result.get("width"),
-            "height": upload_result.get("height"),
-            "format": upload_result.get("format"),
-            "bytes": upload_result.get("bytes"),
-        },
-        "optimize_url": optimize_url,
-        "auto_crop_url": auto_crop_url,
-    }
-
-
 @router.get("/{item_id}", response_model=WardrobeItem)
 async def get_wardrobe_item(item_id: int):
     """
@@ -150,32 +79,12 @@ async def create_wardrobe_item(payload: WardrobeItemCreate):
     Add a new item to the wardrobe
     """
     global next_id
-    
-    # Handle image upload to Cloudinary if enabled
-    image_url = payload.image_url
-    cloudinary_public_id = None
-    
-    if image_url and settings.USE_CLOUDINARY and settings.cloudinary_configured:
-        try:
-            # Upload to Cloudinary
-            upload_result = await upload_image_to_cloudinary(
-                image_data=image_url,
-                tags=["wardrobe", payload.type.lower(), payload.category]
-            )
-            if upload_result.get("uploaded"):
-                image_url = upload_result["url"]
-                cloudinary_public_id = upload_result.get("public_id")
-        except HTTPException:
-            # If Cloudinary upload fails, fall back to base64 storage
-            pass
-    
     new_item = {
         "id": next_id,
         "type": payload.type,
         "color": payload.color,
-        "image_url": image_url,
+        "image_url": payload.image_url,
         "category": payload.category,
-        "cloudinary_id": cloudinary_public_id,
     }
     wardrobe_items.append(new_item)
     next_id += 1
@@ -191,10 +100,5 @@ async def delete_wardrobe_item(item_id: int):
     item = next((it for it in wardrobe_items if it["id"] == item_id), None)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    
-    # Delete from Cloudinary if it was uploaded there
-    if item.get("cloudinary_id"):
-        await delete_image_from_cloudinary(item["cloudinary_id"])
-    
     wardrobe_items = [it for it in wardrobe_items if it["id"] != item_id]
     return Response(status_code=204)
