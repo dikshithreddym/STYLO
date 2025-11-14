@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { wardrobeAPI, WardrobeItem } from '@/lib/api'
+import { getColorHex } from '@/lib/colors'
 import { toggleFavorite, getFavorites } from '@/lib/storage'
 import Link from 'next/link'
 
@@ -102,7 +103,11 @@ export default function WardrobeItemPage({ params }: PageProps) {
                   </button>
                 </div>
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="inline-block w-6 h-6 rounded-full border border-gray-300" style={{ backgroundColor: item.color.toLowerCase() }}></span>
+                  <span
+                    className="inline-block w-6 h-6 rounded-full border border-gray-300 shadow-sm"
+                    style={{ backgroundColor: getColorHex(item.color) }}
+                    title={item.color}
+                  ></span>
                   <span className="text-gray-700">{item.color}</span>
                 </div>
                 {item.category && <div className="text-sm text-gray-500 mb-2">Category: {item.category}</div>}
