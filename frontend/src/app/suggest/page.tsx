@@ -31,9 +31,12 @@ export default function SuggestPage() {
       // Save to history
       const ids = res.outfit.items.map(i => i.id)
       saveSuggestHistory({ id: Math.random().toString(36).slice(2), text, timestamp: Date.now(), outfitItemIds: ids })
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      setError('Failed to get suggestion. Ensure backend is running.')
+      // Extract error message from API response
+      const errorMessage = err?.response?.data?.detail || 'Failed to get suggestion. Ensure backend is running.'
+      setError(errorMessage)
+      setResult(null)
     } finally {
       setLoading(false)
     }
@@ -61,7 +64,24 @@ export default function SuggestPage() {
                 {loading ? 'Analyzing…' : 'Get Suggestion'}
               </Button>
             </div>
-            {error && <p className="text-red-600 mt-3">{error}</p>}
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-red-800 mb-1">Unable to Generate Outfit</h3>
+                    <p className="text-sm text-red-700">{error}</p>
+                    {error.includes('empty') || error.includes('Not enough') ? (
+                      <p className="text-sm text-red-600 mt-2">
+                        💡 Tip: <a href="/wardrobe" className="underline font-medium hover:text-red-800">Add more items to your wardrobe</a> to get outfit suggestions.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            )}
           </form>
         </Card>
 
