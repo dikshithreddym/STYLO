@@ -91,6 +91,40 @@ async def trigger_backfill():
             "traceback": traceback.format_exc()
         }
 
+# Admin endpoint to update category from shoes to footwear
+@app.post("/admin/update-category-to-footwear")
+async def update_category_to_footwear():
+    """Admin endpoint to update all 'shoes' category items to 'footwear'"""
+    try:
+        from app.database import SessionLocal
+        from app.models import WardrobeItem
+        
+        db = SessionLocal()
+        updated_count = 0
+        
+        # Find all items with 'shoes' category
+        items = db.query(WardrobeItem).filter(WardrobeItem.category == 'shoes').all()
+        
+        for item in items:
+            item.category = 'footwear'
+            updated_count += 1
+        
+        db.commit()
+        db.close()
+        
+        return {
+            "status": "success",
+            "message": f"Updated {updated_count} items from 'shoes' to 'footwear'",
+            "updated_count": updated_count
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "message": str(e),
+            "traceback": traceback.format_exc()
+        }
+
 # Include routers
 app.include_router(wardrobe.router, prefix="/wardrobe", tags=["wardrobe"])
 app.include_router(suggestions.router, prefix="/suggestions", tags=["suggestions"])
