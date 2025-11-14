@@ -3,11 +3,5 @@
   "outputDirectory": ".next",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "framework": "nextjs",
-  "env": {
-    "NEXT_PUBLIC_API_URL": {
-      "description": "Backend API URL (e.g., https://your-app.onrender.com)",
-      "value": ""
-    }
-  }
+  "framework": "nextjs"
 }
