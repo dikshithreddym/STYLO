@@ -23,6 +23,7 @@ else:
     allowed_origins = [
         "http://localhost:3000",
         "http://localhost:3001",
+        "https://stylo-chi.vercel.app",
         os.getenv("FRONTEND_URL", "*"),
     ]
 
