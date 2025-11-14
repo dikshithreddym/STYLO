@@ -1,15 +1,13 @@
 # Render deployment configuration
-# This file tells Render how to build and run your application
-
-# Python version (use 3.11 for better binary wheel support)
-python:
-  version: "3.11"
-
-# Build command (runs once during deployment)
-build:
-  - chmod +x build.sh
-  - ./build.sh
-
-# Start command (runs to keep your service running)
-start:
-  - uvicorn app.main:app --host 0.0.0.0 --port $PORT
+services:
+  - type: web
+    name: stylo-backend
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: "./build.sh"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
