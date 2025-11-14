@@ -14,12 +14,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS configuration - allow both local and production origins
-allowed_origins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    os.getenv("FRONTEND_URL", "*"),  # Vercel URL from environment
-]
+# CORS configuration
+# Prefer comma-separated CORS_ORIGINS if provided, otherwise fallback to FRONTEND_URL
+cors_from_env = os.getenv("CORS_ORIGINS")
+if cors_from_env:
+    allowed_origins = [o.strip() for o in cors_from_env.split(",") if o.strip()]
+else:
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        os.getenv("FRONTEND_URL", "*"),
+    ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,6 +34,19 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Total-Count"],
 )
+
+# Run lightweight, idempotent DB migrations on startup
+@app.on_event("startup")
+def run_startup_migrations() -> None:
+    # Only run on server start; safe to run repeatedly
+    try:
+        # The migration checks for the column and only adds if missing
+        from migrate_add_image_description import migrate  # type: ignore
+        migrate()
+        print("Startup migration completed (image_description column ensured)")
+    except Exception as exc:
+        # Do not crash app on migration failure; log for visibility
+        print(f"Migration on startup skipped/failed: {exc}")
 
 # Include routers
 app.include_router(wardrobe.router, prefix="/wardrobe", tags=["wardrobe"])

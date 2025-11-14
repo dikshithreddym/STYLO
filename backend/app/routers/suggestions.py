@@ -5,12 +5,27 @@ from app.schemas import WardrobeItem, SuggestRequest, SuggestResponse, Outfit
 from app.database import get_db
 from app import models
 import os
+from sqlalchemy.exc import ProgrammingError
 
 router = APIRouter()
 
 # Get wardrobe items from database
 def get_wardrobe_items(db: Session) -> List[dict]:
-    items = db.query(models.WardrobeItem).all()
+    try:
+        items = db.query(models.WardrobeItem).all()
+    except ProgrammingError as exc:
+        # Auto-heal missing column by running migration once, then retry
+        msg = str(exc)
+        if "image_description" in msg and "UndefinedColumn" in msg:
+            try:
+                from migrate_add_image_description import migrate  # type: ignore
+                migrate()
+                items = db.query(models.WardrobeItem).all()
+            except Exception:
+                # Re-raise original if healing fails
+                raise
+        else:
+            raise
     return [item.to_dict() for item in items]
 
 COLOR_WORDS = {
