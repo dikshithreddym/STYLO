@@ -1,6 +1,27 @@
 """
-Database models (not used yet - placeholder for future database integration)
+Database models
 """
+from sqlalchemy import Column, Integer, String, Text
+from app.database import Base
 
-# This file will contain SQLAlchemy models when database is integrated
-# For now, we're using in-memory data
+
+class WardrobeItem(Base):
+    """Wardrobe item model"""
+    __tablename__ = "wardrobe_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    type = Column(String(100), nullable=False, index=True)
+    color = Column(String(100), nullable=False, index=True)
+    image_url = Column(Text, nullable=True)  # Cloudinary URL
+    category = Column(String(50), nullable=True, index=True)
+    cloudinary_id = Column(String(255), nullable=True)  # For deletion
+
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            "id": self.id,
+            "type": self.type,
+            "color": self.color,
+            "image_url": self.image_url,
+            "category": self.category,
+        }

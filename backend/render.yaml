@@ -1,0 +1,10 @@
+# Render deployment configuration
+# This file tells Render how to build and run your application
+
+# Build command (runs once during deployment)
+build:
+  - pip install -r requirements.txt
+
+# Start command (runs to keep your service running)
+start:
+  - uvicorn app.main:app --host 0.0.0.0 --port $PORT
