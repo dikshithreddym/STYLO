@@ -250,6 +250,8 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
         if it:
             used.add(it["id"])
             result.append(it)
+            return True
+        return False
 
     if occasion in ("formal", "business", "smart casual"):
         add_if_found("Dress Shirt")
@@ -265,15 +267,75 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
             add_if_found("Dress Shirt")
             add_if_found("Chinos")
     else:
-        # casual default
-        add_if_found("T-Shirt")
-        add_if_found("Jeans")
+        # casual default - try T-Shirt first, then any top
+        if not add_if_found("T-Shirt"):
+            # Try any top if no T-Shirt found
+            items = get_wardrobe_items(db)
+            top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
+            if top_items:
+                if colors:
+                    color_matched = [it for it in top_items if _color_matches(it["color"], colors)]
+                    if color_matched:
+                        result.append(color_matched[0])
+                        used.add(color_matched[0]["id"])
+                    else:
+                        result.append(top_items[0])
+                        used.add(top_items[0]["id"])
+                else:
+                    result.append(top_items[0])
+                    used.add(top_items[0]["id"])
+        
+        # Add bottoms
+        if not add_if_found("Jeans"):
+            # Try any bottom if no Jeans found
+            items = get_wardrobe_items(db)
+            bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+            if bottom_items:
+                if colors:
+                    color_matched = [it for it in bottom_items if _color_matches(it["color"], colors)]
+                    if color_matched:
+                        result.append(color_matched[0])
+                        used.add(color_matched[0]["id"])
+                    else:
+                        result.append(bottom_items[0])
+                        used.add(bottom_items[0]["id"])
+                else:
+                    result.append(bottom_items[0])
+                    used.add(bottom_items[0]["id"])
 
-    # Weather layers
+    # Weather layers - CRITICAL: Prioritize for cold/rain weather
     if weather == "cold":
-        add_if_found("Sweater") or add_if_found("Cardigan") or add_if_found("Jacket")
+        # Try multiple layer types for cold weather
+        layer_added = (
+            add_if_found("Hoodie", "layer") or 
+            add_if_found("Jacket", "layer") or 
+            add_if_found("Sweater", "layer") or 
+            add_if_found("Cardigan", "layer")
+        )
+        # If still no layer, try without category filter
+        if not layer_added:
+            items = get_wardrobe_items(db)
+            layer_items = [
+                it for it in items 
+                if it["id"] not in used and (
+                    it.get("category") == "layer" or 
+                    any(word in it["type"].lower() for word in ["hoodie", "jacket", "sweater", "cardigan"])
+                )
+            ]
+            if layer_items:
+                if colors:
+                    color_matched = [it for it in layer_items if _color_matches(it["color"], colors)]
+                    if color_matched:
+                        result.append(color_matched[0])
+                        used.add(color_matched[0]["id"])
+                    else:
+                        result.append(layer_items[0])
+                        used.add(layer_items[0]["id"])
+                else:
+                    result.append(layer_items[0])
+                    used.add(layer_items[0]["id"])
     elif weather == "rain":
-        add_if_found("Jacket")
+        add_if_found("Jacket") or add_if_found("Hoodie")
 
     # Shoes fallback preferring loafers/boots for formal/business, sneakers otherwise
     if occasion in ("formal", "business"):
@@ -303,12 +365,70 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
     return result
 
 
+def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optional[str], colors: List[str], score: float) -> str:
+    """Generate a detailed explanation for why this outfit was suggested"""
+    parts = []
+    
+    # Occasion reasoning
+    if occasion == "casual":
+        parts.append("This is a relaxed, comfortable outfit perfect for casual settings.")
+    elif occasion == "formal":
+        parts.append("This sophisticated ensemble is ideal for formal occasions.")
+    elif occasion == "business":
+        parts.append("This professional outfit works great for business settings.")
+    elif occasion == "party":
+        parts.append("This stylish combination is perfect for social gatherings.")
+    elif occasion == "smart casual":
+        parts.append("This polished yet comfortable outfit strikes the right balance.")
+    
+    # Weather considerations
+    if weather == "cold":
+        layers = [it for it in items if it.get("category") == "layer" or 
+                 any(word in it["type"].lower() for word in ["hoodie", "jacket", "sweater", "cardigan"])]
+        if layers:
+            layer_names = ", ".join(it["type"] for it in layers)
+            parts.append(f"For the cold weather, I've included {layer_names} to keep you warm.")
+        else:
+            parts.append("Note: Consider adding a jacket or sweater for cold weather.")
+    elif weather == "hot":
+        parts.append("The lightweight pieces will keep you cool in warm weather.")
+    elif weather == "rain":
+        if any("jacket" in it["type"].lower() or "hoodie" in it["type"].lower() for it in items):
+            parts.append("The outerwear will provide protection from the rain.")
+    
+    # Color matching
+    if colors:
+        color_matched_items = [it for it in items if _color_matches(it["color"], colors)]
+        if color_matched_items:
+            matched_pieces = ", ".join(it["type"] for it in color_matched_items)
+            color_list = " and ".join(colors)
+            parts.append(f"I matched your {color_list} preference with the {matched_pieces}.")
+    
+    # Outfit composition
+    categories = {it.get("category") for it in items}
+    has_accessories = "accessories" in categories
+    has_layer = "layer" in categories
+    
+    if has_accessories:
+        accessories = [it["type"] for it in items if it.get("category") == "accessories"]
+        parts.append(f"Added {', '.join(accessories)} to complete the look.")
+    
+    # Confidence note
+    if score >= 0.8:
+        parts.append("This is a highly compatible outfit based on your wardrobe!")
+    elif score >= 0.6:
+        parts.append("This outfit works well with what you have available.")
+    else:
+        parts.append("This is the best match from your current wardrobe items.")
+    
+    return " ".join(parts)
+
+
 def outfit_score(items: List[dict], occasion: str, weather: Optional[str], colors: List[str]) -> float:
     # Simple heuristic scoring 0..1
     score = 0.0
     types = {it["type"].lower() for it in items}
     cats = {it.get("category") for it in items}
-    colors_l = [c.lower() for c in colors]
 
     # Completeness
     has_top = "top" in cats or any(t in types for t in ["dress shirt", "t-shirt"])
@@ -330,10 +450,10 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
     if occasion == "party" and ("dress" in types or "blazer" in types):
         score += 0.15
 
-    # Weather
-    if weather == "cold" and any(t in types for t in ["jacket", "sweater", "cardigan"]):
-        score += 0.1
-    if weather == "hot" and not any(t in types for t in ["jacket", "sweater", "cardigan"]):
+    # Weather - Enhanced scoring for layers
+    if weather == "cold" and any(t in types for t in ["jacket", "sweater", "cardigan", "hoodie"]):
+        score += 0.15  # Increased from 0.1
+    if weather == "hot" and not any(t in types for t in ["jacket", "sweater", "cardigan", "hoodie"]):
         score += 0.05
 
     # Color preference - use smart color matching
@@ -490,7 +610,19 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
     
     scored.sort(key=lambda x: x[1], reverse=True)
     best_items, best_score = scored[0]
-    alt_outfits = [Outfit(items=v, score=s, rationale=None) for v, s in scored[1:]]
+    
+    # Generate intelligent rationale for the best outfit
+    best_rationale = generate_outfit_rationale(best_items, occasion, weather, colors, best_score)
+    
+    # Generate rationales for alternatives too
+    alt_outfits = [
+        Outfit(
+            items=v, 
+            score=s, 
+            rationale=generate_outfit_rationale(v, occasion, weather, colors, s)
+        ) 
+        for v, s in scored[1:]
+    ]
 
     notes_parts = [f"Occasion: {occasion}"]
     if weather:
@@ -501,7 +633,7 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
     return SuggestResponse(
         occasion=occasion,
         colors=colors,
-        outfit=Outfit(items=best_items, score=best_score, rationale=None),
+        outfit=Outfit(items=best_items, score=best_score, rationale=best_rationale),
         alternatives=alt_outfits,
         notes=" | ".join(notes_parts) if notes_parts else None,
     )
