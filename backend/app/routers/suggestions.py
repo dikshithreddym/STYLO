@@ -378,7 +378,10 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                     used.add(shoe_items[0]["id"])
 
     # Weather layers - CRITICAL: Prioritize for cold/rain weather
-    if weather == "cold":
+    # But only if we don't already have a layer in the outfit
+    has_layer = any(it.get("category") == "layer" for it in result)
+    
+    if weather == "cold" and not has_layer:
         # Try multiple layer types for cold weather
         layer_added = (
             add_if_found("Hoodie", "layer") or 
@@ -408,7 +411,7 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                 else:
                     result.append(layer_items[0])
                     used.add(layer_items[0]["id"])
-    elif weather == "rain":
+    elif weather == "rain" and not has_layer:
         add_if_found("Jacket") or add_if_found("Hoodie")
 
     # Shoes fallback preferring loafers/boots for formal/business, sneakers otherwise

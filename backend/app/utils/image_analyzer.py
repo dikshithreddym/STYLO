@@ -52,7 +52,7 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
             "contents": [{
                 "parts": [
                     {
-                        "text": "Describe this clothing item in 1-2 sentences. Include details about the style, material (if visible), color, and any notable features. Be concise and practical."
+                        "text": "Analyze this clothing image and provide a detailed description in 2-3 sentences. First, identify what's written or branded on the item. Then describe the visual characteristics: sleeve length (long/short/sleeveless), fit style (fitted/relaxed/oversized), closure type (zipper/button/pullover), material texture (if visible), and any distinctive design features like pockets, collars, or patterns. Include the color and brand/text visible on the item."
                     },
                     {
                         "inline_data": {
