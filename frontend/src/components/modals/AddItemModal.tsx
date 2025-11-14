@@ -15,7 +15,7 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
   const [color, setColor] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [category, setCategory] = useState<'top' | 'bottom' | 'shoes' | 'layer' | 'one-piece' | 'accessories'>('top')
+  const [category, setCategory] = useState<'top' | 'bottom' | 'footwear' | 'layer' | 'one-piece' | 'accessories'>('top')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -260,7 +260,7 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
               >
                 <option value="top">Top</option>
                 <option value="bottom">Bottom</option>
-                <option value="shoes">Shoes</option>
+                <option value="footwear">Footwear</option>
                 <option value="layer">Layer</option>
                 <option value="one-piece">One-Piece</option>
                 <option value="accessories">Accessories</option>

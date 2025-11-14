@@ -15,7 +15,7 @@ interface WardrobeItem {
   type: string
   color: string
   image_url: string | null
-  category?: 'top' | 'bottom' | 'shoes' | 'layer' | 'one-piece' | 'accessories'
+  category?: 'top' | 'bottom' | 'footwear' | 'layer' | 'one-piece' | 'accessories'
 }
 
 export default function WardrobePage() {
@@ -255,7 +255,7 @@ export default function WardrobePage() {
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
               >
                 <option value="">All</option>
-                {['top','bottom','shoes','layer','one-piece','accessories'].map((c) => (
+                {['top','bottom','footwear','layer','one-piece','accessories'].map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>

@@ -26,7 +26,7 @@ async def get_wardrobe_items(
     q: Optional[str] = Query(None, description="Search query across type and color"),
     type: Optional[str] = Query(None, description="Filter by item type (exact match)"),
     color: Optional[str] = Query(None, description="Filter by color (partial match)"),
-    category: Optional[str] = Query(None, description="Filter by category (top/bottom/shoes/layer/one-piece/accessories)"),
+    category: Optional[str] = Query(None, description="Filter by category (top/bottom/footwear/layer/one-piece/accessories)"),
     sort: Optional[str] = Query(
         None,
         description="Sort by field. Use prefix '-' for descending. Allowed: id, type, color",
