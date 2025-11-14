@@ -12,6 +12,8 @@ from app.utils.cloudinary_helper import (
     initialize_cloudinary,
 )
 from app.config import settings
+from app.utils.image_analyzer import analyze_clothing_image, generate_fallback_description
+import requests, base64, re
 import cloudinary
 import cloudinary.uploader
 
@@ -152,8 +154,11 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
     """
     Add a new item to the wardrobe
     """
+    # Preserve original image data (may be base64 data URL)
+    original_image_data = payload.image_url
+
     # Handle image upload to Cloudinary if enabled
-    image_url = payload.image_url
+    image_url = original_image_data
     cloudinary_public_id = None
     
     if image_url and settings.USE_CLOUDINARY and settings.cloudinary_configured:
@@ -171,12 +176,44 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
             pass
     
     # Create new item in database
+    # Attempt AI / fallback description generation
+    description: str | None = None
+    try:
+        if image_url:
+            base64_data: str | None = None
+            # If original was a data URL, keep that for analysis
+            if original_image_data and isinstance(original_image_data, str) and original_image_data.startswith("data:image/"):
+                base64_data = original_image_data
+            # Otherwise download the final image_url and convert to base64 data URL
+            elif image_url.startswith("http"):
+                resp = requests.get(image_url, timeout=10)
+                if resp.status_code == 200:
+                    mime = resp.headers.get("content-type", "image/jpeg")
+                    encoded = base64.b64encode(resp.content).decode("utf-8")
+                    base64_data = f"data:{mime};base64,{encoded}"
+            # Run AI analyzer if we constructed a base64 payload
+            if base64_data:
+                ai_result = None
+                try:
+                    ai_result = await analyze_clothing_image(base64_data)
+                except Exception:
+                    ai_result = None
+                if ai_result:
+                    description = ai_result
+        # Fallback description if AI missing or failed
+        if description is None:
+            description = generate_fallback_description(payload.type, payload.color, payload.category)
+    except Exception:
+        # Final safeguard: still provide fallback
+        description = generate_fallback_description(payload.type, payload.color, payload.category)
+
     new_item = WardrobeItemModel(
         type=payload.type,
         color=payload.color,
         image_url=image_url,
         category=payload.category,
         cloudinary_id=cloudinary_public_id,
+        image_description=description,
     )
     db.add(new_item)
     db.commit()
