@@ -59,6 +59,17 @@ async def run_startup_migrations() -> None:
         except Exception as exc:
             print(f"⚠️  Backfill on startup failed: {exc}")
 
+# Admin endpoint for manual backfill trigger
+@app.post("/admin/backfill-descriptions")
+async def trigger_backfill():
+    """Admin endpoint to trigger image description backfill for existing items"""
+    try:
+        from backfill_image_descriptions import backfill_descriptions
+        await backfill_descriptions()
+        return {"status": "success", "message": "Backfill completed successfully"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 # Include routers
 app.include_router(wardrobe.router, prefix="/wardrobe", tags=["wardrobe"])
 app.include_router(suggestions.router, prefix="/suggestions", tags=["suggestions"])
