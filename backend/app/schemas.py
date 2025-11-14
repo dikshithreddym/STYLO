@@ -11,7 +11,7 @@ class WardrobeItemBase(BaseModel):
     type: str = Field(..., description="Type of clothing item (e.g., shirt, pants, dress)")
     color: str = Field(..., description="Primary color of the item")
     image_url: Optional[str] = Field(None, description="URL to item image")
-    category: Optional[Literal['top','bottom','shoes','layer','one-piece']] = Field(
+    category: Optional[Literal['top','bottom','shoes','layer','one-piece','accessories']] = Field(
         None, description="Categorization for outfit building"
     )
 

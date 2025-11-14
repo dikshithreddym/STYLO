@@ -84,5 +84,40 @@ DUMMY_WARDROBE_ITEMS = [
         "color": "Black",
         "image_url": "https://images.unsplash.com/photo-1593032457860-3f1a37a94a42?w=400",
         "category": "shoes",
-    }
+    },
+    {
+        "id": 13,
+        "type": "Watch",
+        "color": "Silver",
+        "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400",
+        "category": "accessories",
+    },
+    {
+        "id": 14,
+        "type": "Belt",
+        "color": "Brown",
+        "image_url": "https://images.unsplash.com/photo-1624222247344-550fb60583aa?w=400",
+        "category": "accessories",
+    },
+    {
+        "id": 15,
+        "type": "Sunglasses",
+        "color": "Black",
+        "image_url": "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400",
+        "category": "accessories",
+    },
+    {
+        "id": 16,
+        "type": "Handbag",
+        "color": "Beige",
+        "image_url": "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=400",
+        "category": "accessories",
+    },
+    {
+        "id": 17,
+        "type": "Scarf",
+        "color": "Navy Blue",
+        "image_url": "https://images.unsplash.com/photo-1601924994987-69e26d50dc26?w=400",
+        "category": "accessories",
+    },
 ]
