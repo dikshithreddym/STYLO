@@ -24,6 +24,9 @@ class Settings:
     CLOUDINARY_API_KEY: str = os.getenv("CLOUDINARY_API_KEY", "")
     CLOUDINARY_API_SECRET: str = os.getenv("CLOUDINARY_API_SECRET", "")
     
+    # Google Gemini Configuration (for image analysis)
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    
     # Image upload settings
     CLOUDINARY_FOLDER: str = os.getenv("CLOUDINARY_FOLDER", "stylo_wardrobe")
     MAX_IMAGE_SIZE: int = int(os.getenv("MAX_IMAGE_SIZE", "10485760"))  # 10MB default

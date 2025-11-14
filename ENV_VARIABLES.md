@@ -13,6 +13,7 @@ FRONTEND_URL=https://your-app.vercel.app
 
 ### Optional
 ```bash
+GEMINI_API_KEY=your-gemini-api-key  # For AI image descriptions
 CLOUDINARY_FOLDER=stylo_wardrobe
 USE_CLOUDINARY=true
 MAX_IMAGE_SIZE=10485760

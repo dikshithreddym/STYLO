@@ -205,7 +205,7 @@ def _detect_weather(tokens: List[str]) -> Optional[str]:
     return None
 
 
-def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: Optional[str], db: Session) -> Optional[dict]:
+def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: Optional[str], db: Session, query_tokens: List[str] = []) -> Optional[dict]:
     # Try exact type match first, prefer preferred colors
     items = get_wardrobe_items(db)
     candidates = [
@@ -237,16 +237,28 @@ def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: 
         color_matched = [it for it in candidates if _color_matches(it["color"], colors)]
         if color_matched:
             return color_matched[0]
+            
+    # NEW: Search in image description
+    if query_tokens:
+        desc_candidates = [
+            it for it in items
+            if it["id"] not in used_ids
+            and (category is None or it.get("category") == category)
+            and it.get("image_description")
+            and any(token in it["image_description"].lower() for token in query_tokens)
+        ]
+        if desc_candidates:
+            return desc_candidates[0]
     
     return candidates[0] if candidates else None
 
 
-def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: Session) -> List[dict]:
+def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: Session, query_tokens: List[str] = []) -> List[dict]:
     used: set[int] = set()
     result: List[dict] = []
 
     def add_if_found(t: str, cat: Optional[str] = None):
-        it = _pick(t, colors, used, cat, db)
+        it = _pick(t, colors, used, cat, db, query_tokens)
         if it:
             used.add(it["id"])
             result.append(it)
@@ -365,7 +377,7 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
     return result
 
 
-def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optional[str], colors: List[str], score: float) -> str:
+def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optional[str], colors: List[str], score: float, query_tokens: List[str] = []) -> str:
     """Generate a detailed explanation for why this outfit was suggested"""
     parts = []
     
@@ -403,7 +415,16 @@ def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optiona
             matched_pieces = ", ".join(it["type"] for it in color_matched_items)
             color_list = " and ".join(colors)
             parts.append(f"I matched your {color_list} preference with the {matched_pieces}.")
-    
+            
+    # NEW: Description-based reasoning
+    if query_tokens:
+        for item in items:
+            if item.get("image_description"):
+                desc_lower = item["image_description"].lower()
+                matched_tokens = [token for token in query_tokens if token in desc_lower]
+                if matched_tokens:
+                    parts.append(f"The {item['type']} was chosen as its description mentions '{', '.join(matched_tokens)}'.")
+
     # Outfit composition
     categories = {it.get("category") for it in items}
     has_accessories = "accessories" in categories
@@ -424,7 +445,7 @@ def generate_outfit_rationale(items: List[dict], occasion: str, weather: Optiona
     return " ".join(parts)
 
 
-def outfit_score(items: List[dict], occasion: str, weather: Optional[str], colors: List[str]) -> float:
+def outfit_score(items: List[dict], occasion: str, weather: Optional[str], colors: List[str], query_tokens: List[str] = []) -> float:
     # Simple heuristic scoring 0..1
     score = 0.0
     types = {it["type"].lower() for it in items}
@@ -459,23 +480,31 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
     # Color preference - use smart color matching
     if colors and any(_color_matches(it["color"], colors) for it in items):
         score += 0.05
-
+        
+    # NEW: Description match bonus
+    if query_tokens:
+        for item in items:
+            if item.get("image_description"):
+                desc_lower = item["image_description"].lower()
+                if any(token in desc_lower for token in query_tokens):
+                    score += 0.02 # Small bonus for each item that matches description
+    
     return min(score, 1.0)
 
 
-def generate_alternatives(occasion: str, weather: Optional[str], colors: List[str], limit: int, db: Session) -> List[List[dict]]:
+def generate_alternatives(occasion: str, weather: Optional[str], colors: List[str], limit: int, db: Session, query_tokens: List[str] = []) -> List[List[dict]]:
     # Produce simple variations by toggling bottoms and shoes when possible
-    base = build_outfit(occasion, weather, colors, db)
+    base = build_outfit(occasion, weather, colors, db, query_tokens)
     variations = [base]
 
     # Try alternative bottom if available
-    alt_bottom = _pick("Chinos" if any(x["type"] == "Jeans" for x in base) else "Jeans", colors, set(), "bottom", db)
+    alt_bottom = _pick("Chinos" if any(x["type"] == "Jeans" for x in base) else "Jeans", colors, set(), "bottom", db, query_tokens)
     if alt_bottom:
         v = [it for it in base if it.get("category") != "bottom"] + [alt_bottom]
         variations.append(v)
 
     # Try alternative shoes
-    alt_shoes = _pick("Boots" if any(x["type"] == "Sneakers" for x in base) else "Sneakers", colors, set(), "shoes", db)
+    alt_shoes = _pick("Boots" if any(x["type"] == "Sneakers" for x in base) else "Sneakers", colors, set(), "shoes", db, query_tokens)
     if alt_shoes:
         v = [it for it in base if it.get("category") != "shoes"] + [alt_shoes]
         variations.append(v)
@@ -587,7 +616,7 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
         raise HTTPException(status_code=501, detail="ML service integration not yet implemented")
 
     # Rules engine
-    variants = generate_alternatives(occasion, weather, colors, payload.limit, db)
+    variants = generate_alternatives(occasion, weather, colors, payload.limit, db, tokens)
     
     # If no valid outfits generated, provide helpful message
     if not variants or all(len(v) == 0 for v in variants):
@@ -598,7 +627,7 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
         )
     
     scored = [
-        (v, outfit_score(v, occasion, weather, colors))
+        (v, outfit_score(v, occasion, weather, colors, tokens))
         for v in variants if len(v) > 0
     ]
     
@@ -612,14 +641,14 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
     best_items, best_score = scored[0]
     
     # Generate intelligent rationale for the best outfit
-    best_rationale = generate_outfit_rationale(best_items, occasion, weather, colors, best_score)
+    best_rationale = generate_outfit_rationale(best_items, occasion, weather, colors, best_score, tokens)
     
     # Generate rationales for alternatives too
     alt_outfits = [
         Outfit(
             items=v, 
             score=s, 
-            rationale=generate_outfit_rationale(v, occasion, weather, colors, s)
+            rationale=generate_outfit_rationale(v, occasion, weather, colors, s, tokens)
         ) 
         for v, s in scored[1:]
     ]

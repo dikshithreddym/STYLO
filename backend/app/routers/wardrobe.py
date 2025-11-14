@@ -11,6 +11,7 @@ from app.utils.cloudinary_helper import (
     build_image_url,
     initialize_cloudinary,
 )
+from app.utils.image_analyzer import analyze_clothing_image, generate_fallback_description
 from app.config import settings
 import cloudinary
 import cloudinary.uploader
@@ -158,6 +159,7 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
     # Handle image upload to Cloudinary if enabled
     image_url = payload.image_url
     cloudinary_public_id = None
+    image_description = None
     
     if image_url and settings.USE_CLOUDINARY and settings.cloudinary_configured:
         try:
@@ -173,12 +175,26 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
             # If Cloudinary upload fails, fall back to base64 storage
             pass
     
+    # Generate AI description if image is provided
+    if image_url:
+        # Try to generate AI description
+        image_description = await analyze_clothing_image(image_url)
+        
+        # If AI analysis fails, use fallback description
+        if not image_description:
+            image_description = generate_fallback_description(
+                payload.type, 
+                payload.color, 
+                payload.category
+            )
+    
     new_item = models.WardrobeItem(
         type=payload.type,
         color=payload.color,
         image_url=image_url,
         category=payload.category,
         cloudinary_id=cloudinary_public_id,
+        image_description=image_description,
     )
     
     db.add(new_item)
