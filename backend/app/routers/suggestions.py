@@ -80,8 +80,19 @@ ITEM_TYPE_KEYWORDS = {
 
 
 def _text_tokens(text: str) -> List[str]:
+    """Extract meaningful tokens from text, filtering out stopwords"""
     import re
-    return re.findall(r"[a-zA-Z]+", text.lower())
+    # Common English stopwords that don't help with clothing descriptions
+    stopwords = {
+        'a', 'an', 'the', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'and', 'or',
+        'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+        'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must',
+        'can', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them',
+        'my', 'your', 'his', 'its', 'our', 'their', 'this', 'that', 'these', 'those'
+    }
+    tokens = re.findall(r"[a-zA-Z]+", text.lower())
+    # Filter out stopwords and very short tokens (less than 3 chars)
+    return [t for t in tokens if t not in stopwords and len(t) >= 3]
 
 
 def _detect_query_type(text: str) -> str:
@@ -329,6 +340,10 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                 else:
                     result.append(bottom_items[0])
                     used.add(bottom_items[0]["id"])
+        
+        # ALWAYS try to add shoes for casual outfits
+        if not add_if_found("Sneakers"):
+            add_if_found("Boots") or add_if_found("Loafers")
 
     # Weather layers - CRITICAL: Prioritize for cold/rain weather
     if weather == "cold":
@@ -508,32 +523,52 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
 
 
 def generate_alternatives(occasion: str, weather: Optional[str], colors: List[str], limit: int, db: Session, query_tokens: List[str] = []) -> List[List[dict]]:
-    # Produce simple variations by toggling bottoms and shoes when possible
+    # Produce simple variations by toggling bottoms, shoes, and layers
     base = build_outfit(occasion, weather, colors, db, query_tokens)
     variations = [base]
+    
+    base_ids = {it["id"] for it in base}
 
     # Try alternative bottom if available
-    alt_bottom = _pick("Chinos" if any(x["type"] == "Jeans" for x in base) else "Jeans", colors, set(), "bottom", db, query_tokens)
-    if alt_bottom:
-        v = [it for it in base if it.get("category") != "bottom"] + [alt_bottom]
-        variations.append(v)
+    current_bottom = next((x for x in base if x.get("category") == "bottom"), None)
+    if current_bottom:
+        alt_bottom_type = "Chinos" if "Jeans" in current_bottom["type"] else "Jeans"
+        alt_bottom = _pick(alt_bottom_type, colors, base_ids, "bottom", db, query_tokens)
+        if alt_bottom and alt_bottom["id"] not in base_ids:
+            v = [it for it in base if it.get("category") != "bottom"] + [alt_bottom]
+            variations.append(v)
 
     # Try alternative shoes
-    alt_shoes = _pick("Boots" if any(x["type"] == "Sneakers" for x in base) else "Sneakers", colors, set(), "shoes", db, query_tokens)
-    if alt_shoes:
-        v = [it for it in base if it.get("category") != "shoes"] + [alt_shoes]
-        variations.append(v)
+    current_shoes = next((x for x in base if x.get("category") == "shoes"), None)
+    if current_shoes:
+        alt_shoes_type = "Boots" if "Sneakers" in current_shoes["type"] else "Sneakers"
+        alt_shoes = _pick(alt_shoes_type, colors, base_ids, "shoes", db, query_tokens)
+        if alt_shoes and alt_shoes["id"] not in base_ids:
+            v = [it for it in base if it.get("category") != "shoes"] + [alt_shoes]
+            variations.append(v)
+    
+    # Try with/without layer for more variety
+    current_layer = next((x for x in base if x.get("category") == "layer"), None)
+    if current_layer:
+        # Variant without layer
+        v = [it for it in base if it.get("category") != "layer"]
+        if len(v) > 0:
+            variations.append(v)
+    else:
+        # Try to add a layer
+        alt_layer = _pick("Hoodie", colors, base_ids, "layer", db, query_tokens)
+        if alt_layer and alt_layer["id"] not in base_ids:
+            variations.append(base + [alt_layer])
 
     # De-duplicate by item id sets
     seen = set()
     unique: List[List[dict]] = []
     for v in variations:
         key = tuple(sorted(it["id"] for it in v))
-        if key not in seen:
+        if key not in seen and len(v) > 0:
             seen.add(key)
             unique.append(v)
 
-    # If fewer than limit, just repeat base variants (could be extended)
     return unique[: max(1, limit)]
 
 
