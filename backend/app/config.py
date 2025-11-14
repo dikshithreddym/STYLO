@@ -10,6 +10,15 @@ load_dotenv()
 class Settings:
     """Application settings"""
     
+    # Database Configuration
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "sqlite:///./stylo.db"  # Default to SQLite for local development
+    )
+    
+    # Frontend URL (for CORS)
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    
     # Cloudinary Configuration
     CLOUDINARY_CLOUD_NAME: str = os.getenv("CLOUDINARY_CLOUD_NAME", "")
     CLOUDINARY_API_KEY: str = os.getenv("CLOUDINARY_API_KEY", "")
