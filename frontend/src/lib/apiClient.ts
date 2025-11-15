@@ -8,7 +8,8 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 seconds
+  // Increase default timeout to better handle free-tier cold starts and warmups
+  timeout: 60000, // 60 seconds
 })
 
 // Response interceptor for error handling
