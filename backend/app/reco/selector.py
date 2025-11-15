@@ -125,25 +125,22 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
         scored.sort(key=lambda x: x[1], reverse=True)
         cat_best[cat] = scored[:8]
 
-    # Refinement pass: enforce harder constraints for specific intents when possible
+    # Hard filter for business/formal: block tees, shorts, hoodies, sneakers, joggers, fleece, sweatpants, athletic
     if label in {"business", "formal"}:
+        HARD_AVOID = ["t-shirt", "tee", "short", "shorts", "hoodie", "sneaker", "sneakers", "athletic", "jogger", "fleece", "sweatpant", "nike", "adidas", "trainer", "running"]
+        HARD_PREFER = ["dress shirt", "button-down", "shirt", "polo", "chino", "dress pant", "suit pant", "trouser", "pant", "blazer", "loafer", "boot", "dress shoe"]
         for cat, pairs in list(cat_best.items()):
-            rules = INTENT_RULES.get(label, {}).get(cat, {})
-            if not rules:
-                continue
-            prefer = rules.get("prefer", [])
-            avoid = rules.get("avoid", [])
-            # Reorder: preferred first
-            if prefer:
-                preferred = [(it, s) for it, s in pairs if any(p in (f"{it.get('name','')} {it.get('description','')}").lower() for p in prefer)]
-                if preferred:
-                    others = [(it, s) for it, s in pairs if (it, s) not in preferred]
-                    pairs = preferred + others
-            # Filter out avoided tokens only if we still have at least one non-avoided candidate
-            if avoid:
-                non_avoided = [(it, s) for it, s in pairs if not any(a in (f"{it.get('name','')} {it.get('description','')}").lower() for a in avoid)]
-                if non_avoided:
-                    pairs = non_avoided
+            # Remove all avoided items
+            filtered = [(it, s) for it, s in pairs if not any(a in (f"{it.get('name','')} {it.get('description','')}").lower() for a in HARD_AVOID)]
+            # Prefer preferred items
+            preferred = [(it, s) for it, s in filtered if any(p in (f"{it.get('name','')} {it.get('description','')}").lower() for p in HARD_PREFER)]
+            if preferred:
+                pairs = preferred + [x for x in filtered if x not in preferred]
+            elif filtered:
+                pairs = filtered
+            else:
+                # If nothing left, fallback to original pool
+                pairs = pairs
             # For outerwear, force blazer first if present
             if cat == "layer":
                 blazers = [(it, s) for it, s in pairs if "blazer" in (f"{it.get('name','')} {it.get('description','')}").lower()]
@@ -151,31 +148,6 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
                     others = [(it, s) for it, s in pairs if (it, s) not in blazers]
                     pairs = blazers + others
             cat_best[cat] = pairs[:5]
-
-        # Final safety: if a category's top pick still violates avoidance and a preferred exists deeper, swap it in
-        for cat in ["top", "bottom", "footwear", "layer"]:
-            pairs = cat_best.get(cat, [])
-            if not pairs:
-                continue
-            rules = INTENT_RULES.get(label, {}).get(cat, {})
-            avoid = rules.get("avoid", [])
-            prefer = rules.get("prefer", [])
-            def text(it: Dict) -> str:
-                return (f"{it.get('name','')} {it.get('description','')}").lower()
-            if avoid and any(a in text(pairs[0][0]) for a in avoid):
-                # try to find first non-avoided
-                candidate = next((it for it, s in pairs if not any(a in text(it) for a in avoid)), None)
-                if candidate:
-                    # Move candidate to front
-                    new_pairs = [(candidate, 1.0)] + [(it, s) for it, s in pairs if it is not candidate]
-                    cat_best[cat] = new_pairs[:5]
-            # If still not matching a prefer token and such exists, promote it
-            pairs = cat_best.get(cat, [])
-            if prefer and not any(p in text(pairs[0][0]) for p in prefer):
-                preferred = next((it for it, s in pairs if any(p in text(it) for p in prefer)), None)
-                if preferred:
-                    new_pairs = [(preferred, 1.0)] + [(it, s) for it, s in pairs if it is not preferred]
-                    cat_best[cat] = new_pairs[:5]
 
     # Party at night: demote shorts and hoodies if alternatives exist
     ql = (query or "").lower()
