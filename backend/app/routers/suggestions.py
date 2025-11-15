@@ -351,9 +351,16 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                         result.append(bottom_items[0])
                         used.add(bottom_items[0]["id"])
     else:
-        # casual default - try T-Shirt first, then any top
-        if not add_if_found("T-Shirt"):
-            # Try any top if no T-Shirt found
+        # casual default - MUST have a top
+        # Try T-Shirt first (contains match will find any T-shirt variant)
+        top_added = add_if_found("T-Shirt")
+        
+        # If no T-shirt, try Polo
+        if not top_added:
+            top_added = add_if_found("Polo")
+        
+        # If still no top, get ANY top from category
+        if not top_added:
             items = get_wardrobe_items(db)
             top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
             if top_items:
@@ -362,12 +369,15 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                     if color_matched:
                         result.append(color_matched[0])
                         used.add(color_matched[0]["id"])
+                        top_added = True
                     else:
                         result.append(top_items[0])
                         used.add(top_items[0]["id"])
+                        top_added = True
                 else:
                     result.append(top_items[0])
                     used.add(top_items[0]["id"])
+                    top_added = True
         
         # Add bottoms
         if not add_if_found("Jeans"):
@@ -461,6 +471,32 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                 result.append(shoe_items[0])
                 used.add(shoe_items[0]["id"])
 
+    # Final safety check for casual outfits: ensure we have top, bottom, and footwear
+    if occasion == "casual":
+        has_top = any(it.get("category") == "top" for it in result)
+        has_bottom = any(it.get("category") == "bottom" for it in result)
+        has_footwear = any(it.get("category") == "footwear" for it in result)
+        
+        items = get_wardrobe_items(db)
+        
+        if not has_top:
+            top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
+            if top_items:
+                result.append(top_items[0])
+                used.add(top_items[0]["id"])
+        
+        if not has_bottom:
+            bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+            if bottom_items:
+                result.append(bottom_items[0])
+                used.add(bottom_items[0]["id"])
+        
+        if not has_footwear:
+            shoe_items = [it for it in items if it.get("category") == "footwear" and it["id"] not in used]
+            if shoe_items:
+                result.append(shoe_items[0])
+                used.add(shoe_items[0]["id"])
+    
     # Accessories handling: for active contexts keep functional items (exclude jewelry like rings)
     items = get_wardrobe_items(db)
     if activity:
