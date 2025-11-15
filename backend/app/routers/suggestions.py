@@ -6,6 +6,7 @@ from app.database import get_db
 from app import models
 import os
 from sqlalchemy.exc import ProgrammingError
+from app.utils.intent_classifier import classify_intent
 
 router = APIRouter()
 
@@ -923,8 +924,8 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
 
-    # Detect if this is a query or outfit suggestion request
-    query_type = _detect_query_type(text)
+    # New: intent classification (outfit | item_search | blended_outfit_item | activity_shoes)
+    intent, requested_item = classify_intent(text)
     
     # Check if wardrobe has items
     available_items = get_wardrobe_items(db)
@@ -934,8 +935,23 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
             detail="Your wardrobe is empty. Please add some clothing items first."
         )
     
-    # Handle wardrobe queries (searching for items)
-    if query_type == "query":
+    # Handle item search only
+    if intent == "item_search":
+        # Map requested_item to category and keywords
+        items = get_wardrobe_items(db)
+        if requested_item == "shoes":
+            shoes = [it for it in items if it.get("category") == "footwear"]
+            if len(shoes) == 0:
+                raise HTTPException(status_code=404, detail="No shoes found in your wardrobe.")
+            return SuggestResponse(
+                occasion="query",
+                colors=[],
+                outfit=Outfit(items=shoes, score=1.0, rationale="Search results: shoes"),
+                alternatives=[],
+                notes=f"Found {len(shoes)} shoe(s)",
+                intent=intent,
+            )
+        # fallback to legacy search
         search_result = _search_wardrobe(text, db)
         
         if search_result["found"]:
@@ -960,7 +976,8 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
                     rationale=f"Search results: {search_result['count']} matching item(s)"
                 ),
                 alternatives=[],
-                notes=notes
+                notes=notes,
+                intent=intent,
             )
         else:
             # No items found
@@ -978,7 +995,7 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
                 detail=f"No items found matching '{search_desc}'. Your wardrobe contains: {available_types}."
             )
     
-    # Handle outfit suggestion requests
+    # Handle outfit suggestion requests (intent: outfit or blended_outfit_item or activity_shoes promoted to outfit)
     # Check if wardrobe has basic items needed for an outfit
     has_top_or_dress = any(
         item.get("category") in ["top", "one-piece"] or 
@@ -1054,10 +1071,18 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
     if colors:
         notes_parts.append("Preferred colors: " + ", ".join(colors))
 
+    # If blended intent (e.g., outfit with shoes) append a shoes-only alternative
+    if intent == "blended_outfit_item" and requested_item == "shoes":
+        all_items = get_wardrobe_items(db)
+        shoes = [it for it in all_items if it.get("category") == "footwear"]
+        if shoes:
+            alt_outfits.append(Outfit(items=shoes, score=1.0, rationale="Related shoes from your wardrobe"))
+
     return SuggestResponse(
         occasion=occasion,
         colors=colors,
         outfit=Outfit(items=best_items, score=best_score, rationale=best_rationale),
         alternatives=alt_outfits,
         notes=" | ".join(notes_parts) if notes_parts else None,
+        intent=intent,
     )
