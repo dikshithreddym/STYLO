@@ -55,10 +55,10 @@ COLOR_SYNONYMS = {
 }
 
 OCCASION_KEYWORDS = {
-    "formal": {"formal", "wedding", "ceremony", "black tie", "reception", "gala"},
-    "business": {"business", "office", "interview", "corporate", "professional"},
+    "formal": {"formal", "wedding", "ceremony", "black tie", "reception", "gala", "fancy restaurant", "fine dining"},
+    "business": {"business", "office", "interview", "corporate", "professional", "presentation"},
     "smart casual": {"smart", "smart casual", "semi-formal", "upscale"},
-    "party": {"party", "night out", "club", "birthday", "celebration", "cocktail"},
+    "party": {"party", "night out", "club", "birthday", "celebration", "cocktail", "date night", "date", "fancy"},
     "casual": {"casual", "hangout", "weekend", "everyday", "relaxed", "any", "coffee", "brunch", "errands", "comfortable"},
 }
 
@@ -297,9 +297,10 @@ def _detect_activity(tokens: List[str]) -> Optional[str]:
     activity_map = {
         "walk": {"walk", "walking"},
         "run": {"run", "running", "jog", "jogging"},
-        "hike": {"hike", "hiking", "trail"},
-        "workout": {"workout", "gym", "exercise", "training"},
+        "hike": {"hike", "hiking", "trail", "mountain"},
+        "workout": {"workout", "gym", "exercise", "training", "fitness"},
         "sport": {"sport", "sports", "soccer", "basketball", "tennis"},
+        "beach": {"beach", "swimming", "pool"},
     }
     ts = set(tokens)
     for name, keys in activity_map.items():
@@ -322,12 +323,21 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
         return False
 
     if occasion in ("formal", "business", "smart casual"):
-        add_if_found("Dress Shirt")
-        add_if_found("Blazer") if occasion != "business" or weather != "hot" else None
-        add_if_found("Chinos")
-        # Fallback to Jeans if no chinos
-        if not any(x for x in result if x["type"].lower() == "chinos"):
-            add_if_found("Jeans")
+        # Always add shirt first
+        if not add_if_found("Dress Shirt"):
+            # Fallback to button-down or polo for business
+            if not add_if_found("Button-Down"):
+                add_if_found("Polo")
+        
+        # Add blazer for formal/business (except hot weather)
+        if occasion != "business" or weather != "hot":
+            add_if_found("Blazer")
+        
+        # Prefer chinos, fallback to dress pants or jeans
+        if not add_if_found("Chinos"):
+            if not add_if_found("Dress Pants"):
+                if not add_if_found("Suit Pant"):
+                    add_if_found("Jeans")
     elif occasion == "party":
         # Prefer Dress if available, otherwise try smart casual or fallback to any top+bottom
         add_if_found("Dress")
@@ -352,32 +362,63 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                         used.add(bottom_items[0]["id"])
     else:
         # casual default - MUST have a top
-        # Try T-Shirt first (contains match will find any T-shirt variant)
-        top_added = add_if_found("T-Shirt")
-        
-        # If no T-shirt, try Polo
-        if not top_added:
-            top_added = add_if_found("Polo")
-        
-        # If still no top, get ANY top from category
-        if not top_added:
-            items = get_wardrobe_items(db)
-            top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
-            if top_items:
-                if colors:
-                    color_matched = [it for it in top_items if _color_matches(it["color"], colors)]
-                    if color_matched:
-                        result.append(color_matched[0])
-                        used.add(color_matched[0]["id"])
+        # For workout/gym activity, prefer athletic wear
+        if activity in ("workout", "run", "sport"):
+            # Look for athletic tops (T-shirts, tanks) and shorts
+            top_added = add_if_found("T-Shirt")
+            if not top_added:
+                items = get_wardrobe_items(db)
+                # Prioritize athletic-looking tops from descriptions
+                athletic_tops = [it for it in items if it.get("category") == "top" and it["id"] not in used and 
+                                ("athletic" in it.get("image_description", "").lower() or 
+                                 "sport" in it.get("image_description", "").lower() or
+                                 "performance" in it.get("image_description", "").lower())]
+                if athletic_tops:
+                    result.append(athletic_tops[0])
+                    used.add(athletic_tops[0]["id"])
+                    top_added = True
+                else:
+                    # Fallback to any T-shirt
+                    tshirts = [it for it in items if it.get("category") == "top" and it["id"] not in used]
+                    if tshirts:
+                        result.append(tshirts[0])
+                        used.add(tshirts[0]["id"])
                         top_added = True
+            
+            # For bottoms, prefer shorts
+            if not add_if_found("Shorts"):
+                items = get_wardrobe_items(db)
+                shorts = [it for it in items if "short" in it["type"].lower() and it["category"] == "bottom" and it["id"] not in used]
+                if shorts:
+                    result.append(shorts[0])
+                    used.add(shorts[0]["id"])
+        else:
+            # Regular casual - Try T-Shirt first (contains match will find any T-shirt variant)
+            top_added = add_if_found("T-Shirt")
+            
+            # If no T-shirt, try Polo
+            if not top_added:
+                top_added = add_if_found("Polo")
+            
+            # If still no top, get ANY top from category
+            if not top_added:
+                items = get_wardrobe_items(db)
+                top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
+                if top_items:
+                    if colors:
+                        color_matched = [it for it in top_items if _color_matches(it["color"], colors)]
+                        if color_matched:
+                            result.append(color_matched[0])
+                            used.add(color_matched[0]["id"])
+                            top_added = True
+                        else:
+                            result.append(top_items[0])
+                            used.add(top_items[0]["id"])
+                            top_added = True
                     else:
                         result.append(top_items[0])
                         used.add(top_items[0]["id"])
                         top_added = True
-                else:
-                    result.append(top_items[0])
-                    used.add(top_items[0]["id"])
-                    top_added = True
         
         # Add bottoms
         if not add_if_found("Jeans"):
@@ -496,6 +537,23 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
             if shoe_items:
                 result.append(shoe_items[0])
                 used.add(shoe_items[0]["id"])
+    
+    # Weather-specific adjustments for casual outfits
+    if occasion == "casual" and weather == "hot":
+        # In hot weather, prefer shorts over jeans
+        has_shorts = any("short" in it["type"].lower() for it in result)
+        has_jeans = any("jeans" in it["type"].lower() or "jean" in it["type"].lower() for it in result)
+        
+        if has_jeans and not has_shorts:
+            # Try to replace jeans with shorts
+            items = get_wardrobe_items(db)
+            shorts = [it for it in items if "short" in it["type"].lower() and it["category"] == "bottom" and it["id"] not in used]
+            if shorts:
+                # Remove jeans
+                result = [it for it in result if "jeans" not in it["type"].lower() and "jean" not in it["type"].lower()]
+                # Add shorts
+                result.append(shorts[0])
+                used.add(shorts[0]["id"])
     
     # Accessories handling: for active contexts keep functional items (exclude jewelry like rings)
     items = get_wardrobe_items(db)
