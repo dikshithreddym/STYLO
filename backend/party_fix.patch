@@ -1,0 +1,41 @@
+    elif occasion == "party":
+        # Prefer Dress if available, otherwise try smart casual combo
+        add_if_found("Dress")
+        if not result:
+            # Check if we have a blazer - if so, build a smart party outfit
+            items = get_wardrobe_items(db)
+            has_blazer = any(it for it in items if "blazer" in it["type"].lower() and it["id"] not in used)
+            
+            if has_blazer:
+                # Smart party outfit: any top + chinos/jeans + blazer
+                # Add a base top first
+                if not add_if_found("Dress Shirt"):
+                    # Use any top (T-shirt is fine under blazer for party)
+                    top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
+                    if top_items:
+                        result.append(top_items[0])
+                        used.add(top_items[0]["id"])
+                
+                # Add chinos or nice pants
+                if not add_if_found("Chinos"):
+                    add_if_found("Jeans")
+                
+                # Add the blazer
+                add_if_found("Blazer")
+            else:
+                # Casual party - no blazer available
+                if not add_if_found("Dress Shirt"):
+                    # Fallback to any nice top
+                    top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
+                    if top_items:
+                        result.append(top_items[0])
+                        used.add(top_items[0]["id"])
+                
+                # Add bottoms - prefer Chinos/Jeans
+                if not add_if_found("Chinos"):
+                    if not add_if_found("Jeans"):
+                        # Fallback to any bottom
+                        bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+                        if bottom_items:
+                            result.append(bottom_items[0])
+                            used.add(bottom_items[0]["id"])
