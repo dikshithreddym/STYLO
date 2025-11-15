@@ -1,0 +1,178 @@
+from __future__ import annotations
+
+from typing import Dict, List, Tuple
+
+import numpy as np
+
+from .embedding import Embedder
+from .color_matcher import infer_palette, palette_score
+
+
+def _cosine(a: np.ndarray, b: np.ndarray) -> float:
+    denom = (np.linalg.norm(a) * np.linalg.norm(b))
+    if denom == 0:
+        return 0.0
+    return float(np.dot(a, b) / denom)
+
+
+def _bias_for(label: str) -> float:
+    # Encourage more popular intents slightly to avoid ties feeling random
+    BIAS = {
+        "business": 0.05,
+        "formal": 0.05,
+        "party": 0.04,
+        "casual": 0.03,
+        "workout": 0.05,
+        "beach": 0.04,
+        "hiking": 0.04,
+    }
+    return BIAS.get(label, 0.02)
+
+
+# Intent-aware preferences to nudge selection toward sensible items
+INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
+    "business": {
+        "top": {"prefer": ["dress shirt", "button-down", "shirt"], "avoid": ["t-shirt"]},
+        "bottom": {"prefer": ["chino", "dress pant", "suit pant", "trouser"], "avoid": ["short"]},
+        "footwear": {"prefer": ["loafer", "boot", "dress shoe"], "avoid": ["sneaker", "slide", "sandal"]},
+        "layer": {"prefer": ["blazer"], "avoid": ["hoodie"]},
+    },
+    "formal": {
+        "top": {"prefer": ["dress shirt"], "avoid": ["t-shirt"]},
+        "bottom": {"prefer": ["suit pant", "dress pant"], "avoid": ["jean", "short"]},
+        "footwear": {"prefer": ["dress shoe", "loafer"], "avoid": ["sneaker", "slide", "sandal"]},
+        "layer": {"prefer": ["blazer"], "avoid": ["hoodie"]},
+    },
+    "workout": {
+        "top": {"prefer": ["t-shirt", "tank"], "avoid": ["dress shirt"]},
+        "bottom": {"prefer": ["short"], "avoid": ["jean", "chino", "dress pant"]},
+        "footwear": {"prefer": ["sneaker"], "avoid": ["loafer", "boot", "dress shoe"]},
+        "layer": {"prefer": ["hoodie"], "avoid": ["blazer"]},
+    },
+    "beach": {
+        "top": {"prefer": ["t-shirt"], "avoid": ["dress shirt"]},
+        "bottom": {"prefer": ["short"], "avoid": ["jean", "chino"]},
+        "footwear": {"prefer": ["sandal", "slide"], "avoid": ["loafer", "dress shoe"]},
+        "layer": {"avoid": ["blazer", "sweater"]},
+    },
+    "party": {
+        "top": {"prefer": ["dress shirt", "button-down"], "avoid": []},
+        "bottom": {"prefer": ["chino", "suit pant", "dark jean"], "avoid": []},
+        "footwear": {"prefer": ["loafer", "boot", "sneaker"], "avoid": ["slide", "sandal"]},
+        "layer": {"prefer": ["blazer"], "avoid": []},
+    },
+    "casual": {
+        "top": {"prefer": ["t-shirt", "polo", "sweater"], "avoid": []},
+        "bottom": {"prefer": ["jean", "chino"], "avoid": []},
+        "footwear": {"prefer": ["sneaker", "boot"], "avoid": []},
+        "layer": {"prefer": ["hoodie", "jacket", "cardigan"], "avoid": []},
+    },
+    "hiking": {
+        "footwear": {"prefer": ["boot"], "avoid": ["loafer", "dress shoe", "slide", "sandal"]},
+        "bottom": {"prefer": ["pant"], "avoid": ["short"]},
+        "layer": {"prefer": ["jacket"], "avoid": ["blazer"]},
+        "top": {"prefer": ["t-shirt"], "avoid": ["dress shirt"]},
+    },
+}
+
+
+def _apply_intent_bias(label: str, category: str, name_and_desc: str, base_score: float) -> float:
+    rules = INTENT_RULES.get(label, {})
+    cr = rules.get(category, {})
+    prefer = [t for t in cr.get("prefer", [])]
+    avoid = [t for t in cr.get("avoid", [])]
+    txt = name_and_desc
+    bonus = 0.0
+    if prefer and any(t in txt for t in prefer):
+        bonus += 0.12
+    if avoid and any(t in txt for t in avoid):
+        bonus -= 0.15
+    return base_score + bonus
+
+
+def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -> List[Dict[str, Dict]]:
+    """Select up to k outfits using semantic + color harmony scoring.
+
+    wardrobe: list of dicts with at least keys: id, category, name, color (optional)
+    returns: list of dicts mapping category -> item
+    """
+    emb = Embedder.instance()
+    qv = emb.encode([query])[0]
+
+    # One-per-category pools
+    pools: Dict[str, List[Dict]] = {}
+    for it in wardrobe:
+        cat = (it.get("category") or "").lower()
+        if not cat:
+            continue
+        pools.setdefault(cat, []).append(it)
+
+    # Score within-category by semantic relevance to query and intent label name
+    label_vec = emb.encode([label])[0]
+    cat_best: Dict[str, List[Tuple[Dict, float]]] = {}
+    for cat, items in pools.items():
+        scored: List[Tuple[Dict, float]] = []
+        names = [f"{it.get('name','')} {it.get('description','')}".strip() for it in items]
+        vecs = emb.encode(names)
+        for it, v in zip(items, vecs):
+            s1 = _cosine(qv, v)
+            s2 = _cosine(label_vec, v)
+            raw = 0.6 * s1 + 0.4 * s2
+            score = _apply_intent_bias(label, cat, (f"{it.get('name','')} {it.get('description','')}").lower(), raw)
+            scored.append((it, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        cat_best[cat] = scored[:5]
+
+    # Required categories
+    required = ["top", "bottom", "footwear"]
+    for r in required:
+        if r not in cat_best:
+            return []
+
+    outfits: List[Dict[str, Dict]] = []
+    # Build up to k outfits using greedy selection
+    for i in range(10):  # limit combinations
+        candidate: Dict[str, Dict] = {}
+        for cat in ["top", "bottom", "footwear"]:
+            pool = cat_best.get(cat, [])
+            if not pool:
+                break
+            pick = pool[min(i, len(pool) - 1)][0]
+            candidate[cat] = pick
+
+        # Optional layer/accessories if available (DB uses 'layer')
+        for opt in ["layer", "accessories"]:
+            pool = cat_best.get(opt, [])
+            if pool:
+                # For layer, pick first preferred by intent if available
+                if opt == "layer" and label in INTENT_RULES and INTENT_RULES[label].get("layer", {}).get("prefer"):
+                    pref = INTENT_RULES[label]["layer"]["prefer"]
+                    chosen = None
+                    for it, _ in pool:
+                        t = (f"{it.get('name','')} {it.get('description','')}").lower()
+                        if any(p in t for p in pref):
+                            chosen = it
+                            break
+                    candidate[opt] = chosen or pool[0][0]
+                else:
+                    candidate[opt] = pool[0][0]
+
+        if len(candidate) >= 3:
+            outfits.append(candidate)
+        if len(outfits) >= k:
+            break
+
+    # Score outfits by harmony + per-item semantic avg + intent bias
+    scored_outfits: List[Tuple[Dict[str, Dict], float]] = []
+    for o in outfits:
+        palette = infer_palette(o)
+        cscore = palette_score(palette)
+        item_texts = [f"{v.get('name','')} {v.get('description','')}".strip() for v in o.values()]
+        ivecs = emb.encode(item_texts)
+        sims = [max(0.0, _cosine(qv, v)) for v in ivecs]
+        sem = float(np.mean(sims)) if sims else 0.5
+        total = 0.6 * cscore + 0.4 * sem + _bias_for(label)
+        scored_outfits.append((o, total))
+
+    scored_outfits.sort(key=lambda x: x[1], reverse=True)
+    return [o for o, _ in scored_outfits[:k]]

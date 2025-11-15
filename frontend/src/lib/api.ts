@@ -64,10 +64,39 @@ export const healthAPI = {
   },
 }
 
-// Suggestions API
+// V2 Suggestions API (intelligent recommendations)
+export interface V2Item {
+  id: number
+  name: string
+  category: string
+  color: string | null
+  image_url: string | null
+}
+
+export interface V2Outfit {
+  top: V2Item | null
+  bottom: V2Item | null
+  footwear: V2Item | null
+  outerwear: V2Item | null
+  accessories: V2Item | null
+}
+
+export interface V2SuggestResponse {
+  intent: string
+  outfits: V2Outfit[]
+}
+
+// Legacy v1 format (for backwards compatibility)
 export interface Outfit { items: WardrobeItem[]; score: number; rationale?: string | null }
 
 export const suggestionsAPI = {
+  // New v2 intelligent suggestions
+  suggestV2: async (text: string, limit: number = 3): Promise<V2SuggestResponse> => {
+    const response = await apiClient.post('/v2/suggestions', { text, limit })
+    return response.data
+  },
+  
+  // Legacy v1 suggestions (fallback)
   suggest: async (text: string, options?: { limit?: number; strategy?: 'rules' | 'ml' }): Promise<{
     occasion: string
     colors: string[]

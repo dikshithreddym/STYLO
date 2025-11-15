@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import wardrobe_db as wardrobe
 from app.routers import suggestions
+from app.routers import suggestions_v2
 from app.database import engine, Base
 from datetime import datetime
 import os
@@ -130,6 +131,7 @@ async def update_category_to_footwear():
 # Include routers
 app.include_router(wardrobe.router, prefix="/wardrobe", tags=["wardrobe"])
 app.include_router(suggestions.router, prefix="/suggestions", tags=["suggestions"])
+app.include_router(suggestions_v2.router)
 
 
 @app.get("/health")
