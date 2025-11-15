@@ -281,6 +281,12 @@ def _pick(preferred_type: str, colors: List[str], used_ids: set[int], category: 
 
 def _detect_activity(tokens: List[str]) -> Optional[str]:
     """Detect activity context (e.g., walk, run, hike) to tune outfit."""
+    text_lower = " ".join(tokens)
+    
+    # Exclude phrases like "running errands"
+    if "running" in text_lower and "errand" in text_lower:
+        return None
+    
     activity_map = {
         "walk": {"walk", "walking"},
         "run": {"run", "running", "jog", "jogging"},
@@ -610,10 +616,24 @@ def generate_alternatives(occasion: str, weather: Optional[str], colors: List[st
     variations = []
     used_globally = set()  # Track items used across all outfits
     
+    def deduplicate_categories(outfit: List[dict]) -> List[dict]:
+        """Remove duplicate categories, keeping the first occurrence"""
+        seen_categories = set()
+        deduped = []
+        for item in outfit:
+            cat = item.get("category")
+            if cat not in seen_categories:
+                seen_categories.add(cat)
+                deduped.append(item)
+        return deduped
+    
     # Generate multiple base outfits with different items
     for outfit_num in range(limit):
         # Build outfit avoiding items used in previous outfits
         base = build_outfit(occasion, weather, colors, db, query_tokens)
+        
+        # Deduplicate categories (only one item per category)
+        base = deduplicate_categories(base)
         
         # Filter out items already used in previous outfits
         base_filtered = [it for it in base if it["id"] not in used_globally]
