@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import wardrobe_db as wardrobe
 from app.routers import suggestions
 from app.database import engine, Base
+from datetime import datetime
 import os
 
 # Create database tables
@@ -135,6 +136,28 @@ app.include_router(suggestions.router, prefix="/suggestions", tags=["suggestions
 async def health_check():
     """Health check endpoint"""
     return {"status": "ok"}
+
+
+@app.get("/admin/version")
+async def version_info():
+    """Admin: return deployment/version metadata to verify live build.
+
+    Includes commit SHA from common platforms, optional SERVICE_VERSION env,
+    the app version configured in FastAPI, and current UTC time.
+    """
+    commit = (
+        os.getenv("RENDER_GIT_COMMIT")
+        or os.getenv("GIT_COMMIT")
+        or os.getenv("VERCEL_GIT_COMMIT_SHA")
+        or os.getenv("RENDER_GIT_BRANCH")  # fallback if SHA not present
+    )
+    return {
+        "commit": commit,
+        "service_version": os.getenv("SERVICE_VERSION"),
+        "app_version": app.version,
+        "time": datetime.utcnow().isoformat() + "Z",
+        "env": os.getenv("ENVIRONMENT") or os.getenv("NODE_ENV") or "",
+    }
 
 
 @app.get("/")
