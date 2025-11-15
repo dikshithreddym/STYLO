@@ -32,15 +32,15 @@ def _bias_for(label: str) -> float:
 # Intent-aware preferences to nudge selection toward sensible items
 INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
     "business": {
-        "top": {"prefer": ["dress shirt", "button-down", "shirt", "polo"], "avoid": ["t-shirt", "hoodie"]},
-        "bottom": {"prefer": ["chino", "dress pant", "suit pant", "trouser", "pant"], "avoid": ["short", "jogger", "fleece"]},
-        "footwear": {"prefer": ["loafer", "boot", "dress shoe"], "avoid": ["sneaker", "slide", "sandal"]},
+        "top": {"prefer": ["dress shirt", "button-down", "shirt", "polo"], "avoid": ["t-shirt", "hoodie", "tee"]},
+        "bottom": {"prefer": ["chino", "dress pant", "suit pant", "trouser", "pant"], "avoid": ["short", "shorts", "jogger", "fleece", "sweatpant"]},
+        "footwear": {"prefer": ["loafer", "boot", "dress"], "avoid": ["sneaker", "sneakers", "slide", "sandal", "nike", "adidas", "athletic", "running", "trainer"]},
         "layer": {"prefer": ["blazer"], "avoid": ["hoodie"]},
     },
     "formal": {
-        "top": {"prefer": ["dress shirt"], "avoid": ["t-shirt", "hoodie"]},
-        "bottom": {"prefer": ["suit pant", "dress pant", "trouser"], "avoid": ["jean", "short", "jogger", "fleece"]},
-        "footwear": {"prefer": ["dress shoe", "loafer"], "avoid": ["sneaker", "slide", "sandal"]},
+        "top": {"prefer": ["dress shirt"], "avoid": ["t-shirt", "hoodie", "tee"]},
+        "bottom": {"prefer": ["suit pant", "dress pant", "trouser"], "avoid": ["jean", "short", "shorts", "jogger", "fleece", "sweatpant"]},
+        "footwear": {"prefer": ["dress", "loafer"], "avoid": ["sneaker", "sneakers", "slide", "sandal", "nike", "adidas", "athletic", "running", "trainer"]},
         "layer": {"prefer": ["blazer"], "avoid": ["hoodie"]},
     },
     "workout": {
@@ -52,7 +52,7 @@ INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
     "beach": {
         "top": {"prefer": ["t-shirt"], "avoid": ["dress shirt"]},
         "bottom": {"prefer": ["short"], "avoid": ["jean", "chino"]},
-        "footwear": {"prefer": ["sandal", "slide"], "avoid": ["loafer", "dress shoe", "sneaker"]},
+        "footwear": {"prefer": ["sandal", "slide", "flip"], "avoid": ["loafer", "dress", "sneaker", "nike", "adidas"]},
         "layer": {"avoid": ["blazer", "sweater"]},
     },
     "party": {
@@ -68,7 +68,7 @@ INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
         "layer": {"prefer": ["hoodie", "jacket", "cardigan"], "avoid": []},
     },
     "hiking": {
-        "footwear": {"prefer": ["boot", "hiking"], "avoid": ["loafer", "dress shoe", "slide", "sandal", "sneaker"]},
+        "footwear": {"prefer": ["boot", "hiking"], "avoid": ["loafer", "dress", "slide", "sandal", "sneaker", "nike", "adidas"]},
         "bottom": {"prefer": ["pant"], "avoid": ["short"]},
         "layer": {"prefer": ["jacket"], "avoid": ["blazer"]},
         "top": {"prefer": ["t-shirt"], "avoid": ["dress shirt"]},
@@ -144,9 +144,40 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
                 non_avoided = [(it, s) for it, s in pairs if not any(a in (f"{it.get('name','')} {it.get('description','')}").lower() for a in avoid)]
                 if non_avoided:
                     pairs = non_avoided
+            # For outerwear, force blazer first if present
+            if cat == "layer":
+                blazers = [(it, s) for it, s in pairs if "blazer" in (f"{it.get('name','')} {it.get('description','')}").lower()]
+                if blazers:
+                    others = [(it, s) for it, s in pairs if (it, s) not in blazers]
+                    pairs = blazers + others
             cat_best[cat] = pairs[:5]
 
-    # Party at night: demote shorts if alternatives exist
+        # Final safety: if a category's top pick still violates avoidance and a preferred exists deeper, swap it in
+        for cat in ["top", "bottom", "footwear", "layer"]:
+            pairs = cat_best.get(cat, [])
+            if not pairs:
+                continue
+            rules = INTENT_RULES.get(label, {}).get(cat, {})
+            avoid = rules.get("avoid", [])
+            prefer = rules.get("prefer", [])
+            def text(it: Dict) -> str:
+                return (f"{it.get('name','')} {it.get('description','')}").lower()
+            if avoid and any(a in text(pairs[0][0]) for a in avoid):
+                # try to find first non-avoided
+                candidate = next((it for it, s in pairs if not any(a in text(it) for a in avoid)), None)
+                if candidate:
+                    # Move candidate to front
+                    new_pairs = [(candidate, 1.0)] + [(it, s) for it, s in pairs if it is not candidate]
+                    cat_best[cat] = new_pairs[:5]
+            # If still not matching a prefer token and such exists, promote it
+            pairs = cat_best.get(cat, [])
+            if prefer and not any(p in text(pairs[0][0]) for p in prefer):
+                preferred = next((it for it, s in pairs if any(p in text(it) for p in prefer)), None)
+                if preferred:
+                    new_pairs = [(preferred, 1.0)] + [(it, s) for it, s in pairs if it is not preferred]
+                    cat_best[cat] = new_pairs[:5]
+
+    # Party at night: demote shorts and hoodies if alternatives exist
     ql = (query or "").lower()
     if label == "party" and ("night" in ql or "evening" in ql):
         pairs = cat_best.get("bottom", [])
@@ -154,8 +185,13 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
             non_shorts = [(it, s) for it, s in pairs if "short" not in (f"{it.get('name','')} {it.get('description','')}").lower()]
             if non_shorts:
                 cat_best["bottom"] = non_shorts[:5]
+        lpairs = cat_best.get("layer", [])
+        if lpairs:
+            non_hoodie = [(it, s) for it, s in lpairs if "hoodie" not in (f"{it.get('name','')} {it.get('description','')}").lower()]
+            if non_hoodie:
+                cat_best["layer"] = non_hoodie[:5]
 
-    # Beach: prefer sandals/slides, demote sneakers if alternatives exist
+    # Beach: prefer sandals/slides, demote brand sneakers if alternatives exist
     if label == "beach":
         pairs = cat_best.get("footwear", [])
         if pairs:
@@ -163,7 +199,7 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
             if sandals:
                 others = [(it, s) for it, s in pairs if (it, s) not in sandals]
                 pairs = sandals + others
-            non_sneakers = [(it, s) for it, s in pairs if "sneaker" not in (f"{it.get('name','')} {it.get('description','')}").lower()]
+            non_sneakers = [(it, s) for it, s in pairs if all(k not in (f"{it.get('name','')} {it.get('description','')}").lower() for k in ["sneaker", "nike", "adidas"])]
             if non_sneakers:
                 pairs = non_sneakers
             cat_best["footwear"] = pairs[:5]
