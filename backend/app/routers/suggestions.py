@@ -109,7 +109,7 @@ def _detect_query_type(text: str) -> str:
         return "query"
     
     # Outfit suggestion patterns
-    suggestion_words = ["suggest", "outfit", "wear", "dress", "occasion", "party", "meeting", "casual", "formal"]
+    suggestion_words = ["suggest", "outfit", "wear", "dress", "occasion", "party", "meeting", "casual", "formal", "interview", "wedding", "date", "dinner", "gym", "workout", "beach", "hik"]
     if any(word in text_lower for word in suggestion_words):
         return "suggestion"
     
@@ -339,28 +339,38 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                 if not add_if_found("Suit Pant"):
                     add_if_found("Jeans")
     elif occasion == "party":
-        # Prefer Dress if available, otherwise try smart casual or fallback to any top+bottom
-        add_if_found("Dress")
-        if not result:
-            # Try smart casual combo
-            if not add_if_found("Dress Shirt"):
-                # Fallback to any nice top
-                items = get_wardrobe_items(db)
-                top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
-                if top_items:
-                    result.append(top_items[0])
-                    used.add(top_items[0]["id"])
+        # Prefer Dress if available, otherwise build smart casual combo
+        dress_added = add_if_found("Dress")
+        
+        # If no dress, ensure we have top and bottom
+        if not dress_added:
+            # Check if we already have a top
+            has_top = any(it.get("category") == "top" for it in result)
+            if not has_top:
+                # Try smart casual top
+                if not add_if_found("Dress Shirt"):
+                    if not add_if_found("Button-Down"):
+                        if not add_if_found("Polo"):
+                            # Fallback to any top
+                            items = get_wardrobe_items(db)
+                            top_items = [it for it in items if it.get("category") == "top" and it["id"] not in used]
+                            if top_items:
+                                result.append(top_items[0])
+                                used.add(top_items[0]["id"])
             
-            # Add bottoms - prefer Chinos/Jeans for party
-            if not add_if_found("Chinos"):
-                if not add_if_found("Jeans"):
+            # Check if we already have a bottom
+            has_bottom = any(it.get("category") == "bottom" for it in result)
+            if not has_bottom:
+                # Add bottoms - prefer Chinos/Suit pants for party
+                if not add_if_found("Chinos"):
                     if not add_if_found("Suit Pant"):
-                        # Fallback to any bottom
-                        items = get_wardrobe_items(db)
-                        bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
-                        if bottom_items:
-                            result.append(bottom_items[0])
-                            used.add(bottom_items[0]["id"])
+                        if not add_if_found("Jeans"):
+                            # Fallback to any bottom
+                            items = get_wardrobe_items(db)
+                            bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+                            if bottom_items:
+                                result.append(bottom_items[0])
+                                used.add(bottom_items[0]["id"])
             
             # Add blazer/layer for elevated party look if available
             if not any(it.get("category") == "layer" for it in result):
