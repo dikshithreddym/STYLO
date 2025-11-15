@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Response, Depends
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.schemas import WardrobeItem as WardrobeItemSchema, WardrobeItemCreate
 from app.models import WardrobeItem as WardrobeItemModel
@@ -16,6 +16,8 @@ from app.utils.image_analyzer import analyze_clothing_image, generate_fallback_d
 import requests, base64, re
 import cloudinary
 import cloudinary.uploader
+import cloudinary.api
+from app.data.wardrobe_data import DUMMY_WARDROBE_ITEMS
 
 router = APIRouter()
 
@@ -136,6 +138,131 @@ async def cloudinary_test():
         "optimize_url": optimize_url,
         "auto_crop_url": auto_crop_url,
     }
+
+
+@router.delete("/clear-demo")
+async def clear_demo_items(db: Session = Depends(get_db)):
+    """Remove demo/seeded items (those without Cloudinary public_id or Unsplash URLs)."""
+    removed = 0
+    items = db.query(WardrobeItemModel).all()
+    for it in items:
+        if (not it.cloudinary_id) or (it.image_url and "images.unsplash.com" in it.image_url):
+            db.delete(it)
+            removed += 1
+    db.commit()
+    return {"status": "ok", "removed": removed}
+
+
+@router.delete("/clear-all")
+async def clear_all_items(db: Session = Depends(get_db)):
+    """Remove all wardrobe items (dangerous)."""
+    count = db.query(WardrobeItemModel).count()
+    db.query(WardrobeItemModel).delete()
+    db.commit()
+    return {"status": "ok", "removed": count}
+
+
+@router.post("/sync-cloudinary")
+async def sync_from_cloudinary(
+    db: Session = Depends(get_db),
+    folder: Optional[str] = Query(None, description="Cloudinary folder prefix; defaults to settings.CLOUDINARY_FOLDER"),
+    max_results: int = Query(100, ge=1, le=500, description="Max resources to pull per page"),
+):
+    """Create wardrobe items from existing Cloudinary images in the configured folder.
+
+    - Skips images already present (matched by cloudinary_id)
+    - Infers type/category from public_id/tags heuristically
+    - Uses secure URL and stores cloudinary_id for deletion
+    """
+    from app.utils.cloudinary_helper import initialize_cloudinary
+    if not settings.cloudinary_configured:
+        raise HTTPException(status_code=400, detail="Cloudinary not configured")
+
+    initialize_cloudinary()
+    prefix = folder or settings.CLOUDINARY_FOLDER
+    created = 0
+
+    next_cursor = None
+    while True:
+        params = {
+            "type": "upload",
+            "prefix": prefix if prefix else None,
+            "max_results": max_results,
+            "next_cursor": next_cursor,
+        }
+        # Remove None values
+        params = {k: v for k, v in params.items() if v is not None}
+
+        res = cloudinary.api.resources(**params)
+        resources = res.get("resources", [])
+        for r in resources:
+            public_id = r.get("public_id")
+            secure_url = r.get("secure_url") or r.get("url")
+            tags = r.get("tags") or []
+
+            # Skip if already imported
+            existing = db.query(WardrobeItemModel).filter(WardrobeItemModel.cloudinary_id == public_id).first()
+            if existing:
+                continue
+
+            inferred_type, category = _infer_category_and_type(public_id or "", tags)
+            # Simple color inference from tags or public_id tokens
+            color = None
+            for c in ["black", "white", "navy", "blue", "green", "olive", "grey", "gray", "beige", "khaki", "burgundy", "charcoal", "brown"]:
+                if c in (" ".join(tags) + " " + (public_id or "")).lower():
+                    color = c.title() if c != "navy" else "Navy Blue"
+                    break
+            if color is None:
+                color = "Unknown"
+
+            desc = generate_fallback_description(inferred_type, color, category)
+            item = WardrobeItemModel(
+                type=inferred_type,
+                color=color,
+                image_url=secure_url,
+                category=category,
+                cloudinary_id=public_id,
+                image_description=desc,
+            )
+            db.add(item)
+            created += 1
+
+        db.commit()
+
+        next_cursor = res.get("next_cursor")
+        if not next_cursor:
+            break
+
+    return {"status": "ok", "created": created, "folder": prefix}
+
+
+@router.post("/recategorize")
+async def recategorize_from_descriptions(db: Session = Depends(get_db)):
+    """Re-categorize items based on their Gemini-generated descriptions"""
+    items = db.query(WardrobeItemModel).all()
+    updated = 0
+    
+    for item in items:
+        desc = (item.image_description or "").lower()
+        old_cat = item.category
+        
+        # Infer category from description
+        if any(kw in desc for kw in ["t-shirt", "shirt", "polo", "blouse", "tank", "sweater", "pullover"]):
+            item.category = "top"
+        elif any(kw in desc for kw in ["trouser", "pant", "jean", "chino", "short"]):
+            item.category = "bottom"
+        elif any(kw in desc for kw in ["jacket", "blazer", "hoodie", "coat", "cardigan", "wetsuit"]):
+            item.category = "layer"
+        elif any(kw in desc for kw in ["shoe", "sneaker", "boot", "loafer", "sandal", "slide"]):
+            item.category = "footwear"
+        elif any(kw in desc for kw in ["watch", "belt", "scarf", "jewelry", "sunglass", "bracelet"]):
+            item.category = "accessories"
+        
+        if item.category != old_cat:
+            updated += 1
+    
+    db.commit()
+    return {"status": "ok", "updated": updated}
 
 
 @router.get("/{item_id}", response_model=WardrobeItemSchema)
@@ -285,3 +412,187 @@ async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return Response(status_code=204)
+
+
+ 
+
+
+@router.post("/seed-demo")
+async def seed_demo_data(
+    db: Session = Depends(get_db),
+    force: bool = Query(False, description="Insert demo items even if DB not empty"),
+    mode: str = Query("append", description="append | replace existing items when force=true"),
+):
+    """Seed the database with a small demo wardrobe if empty.
+
+    - Idempotent: only inserts when there are zero items
+    - Normalizes 'shoes' category to 'footwear'
+    - Generates fallback image descriptions
+    """
+    total = db.query(WardrobeItemModel).count()
+    if total > 0 and not force:
+        return {"status": "skipped", "message": f"Database already has {total} items"}
+
+    if force and mode.lower() == "replace":
+        # Danger: wipe table contents then seed
+        db.query(WardrobeItemModel).delete()
+        db.commit()
+
+    created = 0
+    for d in DUMMY_WARDROBE_ITEMS:
+        cat = d.get("category") or None
+        if cat == "shoes":
+            cat = "footwear"
+        desc = generate_fallback_description(d["type"], d["color"], cat)
+        item = WardrobeItemModel(
+            type=d["type"],
+            color=d["color"],
+            image_url=d.get("image_url"),
+            category=cat,
+            image_description=desc,
+        )
+        db.add(item)
+        created += 1
+    db.commit()
+    return {"status": "ok", "created": created, "previous_count": total}
+
+
+def _infer_category_and_type(name: str, tags: Optional[List[str]] = None) -> Tuple[str, str]:
+    """Infer (type, category) from public_id or tags.
+
+    - Uses simple keyword heuristics. Defaults to (name, 'accessories') if unknown.
+    """
+    tokens = (name or "").lower().replace("-", " ").replace("_", " ").split("/")
+    base = tokens[-1] if tokens else name.lower()
+    all_text = " ".join(tokens + (tags or []))
+
+    def has(*words: str) -> bool:
+        return any(w in all_text for w in words)
+
+    # One-piece
+    if has("dress"):
+        return ("Dress", "one-piece")
+    # Tops
+    if has("t shirt", "t-shirt", "tshirt", "shirt", "polo", "blouse", "sweater"):
+        if "dress shirt" in all_text:
+            return ("Dress Shirt", "top")
+        if "t shirt" in all_text or "t-shirt" in all_text or "tshirt" in all_text:
+            return ("T-Shirt", "top")
+        if "polo" in all_text:
+            return ("Polo", "top")
+        if "sweater" in all_text:
+            return ("Sweater", "top")
+        return ("Shirt", "top")
+    # Bottoms
+    if has("jean", "jeans"):
+        return ("Jeans", "bottom")
+    if has("chino", "trouser", "pant"):
+        if "short" in all_text:
+            return ("Shorts", "bottom")
+        return ("Chinos", "bottom")
+    if has("skirt"):
+        return ("Skirt", "bottom")
+    if has("short"):
+        return ("Shorts", "bottom")
+    # Layer
+    if has("blazer"):
+        return ("Blazer", "layer")
+    if has("jacket"):
+        return ("Jacket", "layer")
+    if has("hoodie"):
+        return ("Hoodie", "layer")
+    if has("cardigan"):
+        return ("Cardigan", "layer")
+    # Footwear
+    if has("sneaker", "shoe", "boots", "boot", "loafer", "sandal", "slide"):
+        if "sneaker" in all_text:
+            return ("Sneakers", "footwear")
+        if "loafer" in all_text:
+            return ("Loafers", "footwear")
+        if "boot" in all_text:
+            return ("Boots", "footwear")
+        if "sandal" in all_text:
+            return ("Sandals", "footwear")
+        return ("Shoes", "footwear")
+    # Accessories
+    if has("watch", "belt", "sunglass", "scarf", "handbag", "bag"):
+        if "watch" in all_text:
+            return ("Watch", "accessories")
+        if "belt" in all_text:
+            return ("Belt", "accessories")
+        if "sunglass" in all_text:
+            return ("Sunglasses", "accessories")
+        if "scarf" in all_text:
+            return ("Scarf", "accessories")
+        if "handbag" in all_text or "bag" in all_text:
+            return ("Handbag", "accessories")
+
+    # Fallback
+    pretty = base.replace("_", " ").title()
+    return (pretty, "accessories")
+    """Create wardrobe items from existing Cloudinary images in the configured folder.
+
+    - Skips images already present (matched by cloudinary_id)
+    - Infers type/category from public_id/tags heuristically
+    - Uses secure URL and stores cloudinary_id for deletion
+    """
+    from app.utils.cloudinary_helper import initialize_cloudinary
+    if not settings.cloudinary_configured:
+        raise HTTPException(status_code=400, detail="Cloudinary not configured")
+
+    initialize_cloudinary()
+    prefix = folder or settings.CLOUDINARY_FOLDER
+    created = 0
+
+    next_cursor = None
+    while True:
+        params = {
+            "type": "upload",
+            "prefix": prefix if prefix else None,
+            "max_results": max_results,
+            "next_cursor": next_cursor,
+        }
+        # Remove None values
+        params = {k: v for k, v in params.items() if v is not None}
+
+        res = cloudinary.api.resources(**params)
+        resources = res.get("resources", [])
+        for r in resources:
+            public_id = r.get("public_id")
+            secure_url = r.get("secure_url") or r.get("url")
+            tags = r.get("tags") or []
+
+            # Skip if already imported
+            existing = db.query(WardrobeItemModel).filter(WardrobeItemModel.cloudinary_id == public_id).first()
+            if existing:
+                continue
+
+            inferred_type, category = _infer_category_and_type(public_id or "", tags)
+            # Simple color inference from tags or public_id tokens
+            color = None
+            for c in ["black", "white", "navy", "blue", "green", "olive", "grey", "gray", "beige", "khaki", "burgundy", "charcoal", "brown"]:
+                if c in (" ".join(tags) + " " + (public_id or "")).lower():
+                    color = c.title() if c != "navy" else "Navy Blue"
+                    break
+            if color is None:
+                color = "Unknown"
+
+            desc = generate_fallback_description(inferred_type, color, category)
+            item = WardrobeItemModel(
+                type=inferred_type,
+                color=color,
+                image_url=secure_url,
+                category=category,
+                cloudinary_id=public_id,
+                image_description=desc,
+            )
+            db.add(item)
+            created += 1
+
+        db.commit()
+
+        next_cursor = res.get("next_cursor")
+        if not next_cursor:
+            break
+
+    return {"status": "ok", "created": created, "folder": prefix}

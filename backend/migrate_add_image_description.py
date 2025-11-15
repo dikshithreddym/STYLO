@@ -1,33 +1,30 @@
 """
-Migration script to add image_description column to wardrobe_items table
-Run this script once to update your database schema
+Idempotent migration: ensure wardrobe_items.image_description exists.
+Works on SQLite and Postgres using SQLAlchemy Inspector.
 """
-from sqlalchemy import create_engine, text
-from app.config import settings
+from sqlalchemy import inspect, text
+from app.database import engine, Base
+from app.models import WardrobeItem  # noqa: F401 - ensure model is registered
 
-def migrate():
-    """Add image_description column to wardrobe_items table"""
-    engine = create_engine(settings.DATABASE_URL)
-    
-    with engine.connect() as connection:
-        # Check if column already exists
-        result = connection.execute(text("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='wardrobe_items' 
-            AND column_name='image_description'
-        """))
-        
-        if result.fetchone() is None:
-            print("Adding image_description column...")
-            connection.execute(text("""
-                ALTER TABLE wardrobe_items 
-                ADD COLUMN image_description TEXT
-            """))
-            connection.commit()
-            print("✅ Successfully added image_description column")
+
+def migrate() -> None:
+    """Ensure image_description column exists, creating table if needed."""
+    # Ensure tables exist (no-op if already created)
+    Base.metadata.create_all(bind=engine)
+
+    with engine.begin() as conn:
+        insp = inspect(conn)
+        # Create table if missing
+        if not insp.has_table("wardrobe_items"):
+            Base.metadata.create_all(bind=engine)
+
+        cols = [c["name"] for c in insp.get_columns("wardrobe_items")]
+        if "image_description" not in cols:
+            conn.execute(text("ALTER TABLE wardrobe_items ADD COLUMN image_description TEXT"))
+            print("✅ Added image_description column to wardrobe_items")
         else:
-            print("ℹ️  Column image_description already exists, skipping migration")
+            print("ℹ️  image_description column already present; no changes needed")
+
 
 if __name__ == "__main__":
     migrate()

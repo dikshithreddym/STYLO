@@ -5,7 +5,7 @@ from app.schemas import WardrobeItem, SuggestRequest, SuggestResponse, Outfit
 from app.database import get_db
 from app import models
 import os
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import ProgrammingError, OperationalError
 from app.utils.intent_classifier import classify_intent
 
 router = APIRouter()
@@ -14,10 +14,14 @@ router = APIRouter()
 def get_wardrobe_items(db: Session) -> List[dict]:
     try:
         items = db.query(models.WardrobeItem).all()
-    except ProgrammingError as exc:
+    except (ProgrammingError, OperationalError) as exc:
         # Auto-heal missing column by running migration once, then retry
         msg = str(exc)
-        if "image_description" in msg and "UndefinedColumn" in msg:
+        needs_migration = (
+            ("image_description" in msg and "UndefinedColumn" in msg)  # Postgres
+            or ("no such column" in msg and "image_description" in msg)  # SQLite
+        )
+        if needs_migration:
             try:
                 from migrate_add_image_description import migrate  # type: ignore
                 migrate()
