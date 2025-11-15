@@ -52,7 +52,7 @@ INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
     "beach": {
         "top": {"prefer": ["t-shirt"], "avoid": ["dress shirt"]},
         "bottom": {"prefer": ["short"], "avoid": ["jean", "chino"]},
-        "footwear": {"prefer": ["sandal", "slide"], "avoid": ["loafer", "dress shoe"]},
+        "footwear": {"prefer": ["sandal", "slide"], "avoid": ["loafer", "dress shoe", "sneaker"]},
         "layer": {"avoid": ["blazer", "sweater"]},
     },
     "party": {
@@ -68,7 +68,7 @@ INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
         "layer": {"prefer": ["hoodie", "jacket", "cardigan"], "avoid": []},
     },
     "hiking": {
-        "footwear": {"prefer": ["boot"], "avoid": ["loafer", "dress shoe", "slide", "sandal"]},
+        "footwear": {"prefer": ["boot", "hiking"], "avoid": ["loafer", "dress shoe", "slide", "sandal", "sneaker"]},
         "bottom": {"prefer": ["pant"], "avoid": ["short"]},
         "layer": {"prefer": ["jacket"], "avoid": ["blazer"]},
         "top": {"prefer": ["t-shirt"], "avoid": ["dress shirt"]},
@@ -125,7 +125,7 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
         scored.sort(key=lambda x: x[1], reverse=True)
         cat_best[cat] = scored[:8]
 
-    # Refinement pass: enforce harder business/formal constraints if possible
+    # Refinement pass: enforce harder constraints for specific intents when possible
     if label in {"business", "formal"}:
         for cat, pairs in list(cat_best.items()):
             rules = INTENT_RULES.get(label, {}).get(cat, {})
@@ -145,6 +145,43 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
                 if non_avoided:
                     pairs = non_avoided
             cat_best[cat] = pairs[:5]
+
+    # Party at night: demote shorts if alternatives exist
+    ql = (query or "").lower()
+    if label == "party" and ("night" in ql or "evening" in ql):
+        pairs = cat_best.get("bottom", [])
+        if pairs:
+            non_shorts = [(it, s) for it, s in pairs if "short" not in (f"{it.get('name','')} {it.get('description','')}").lower()]
+            if non_shorts:
+                cat_best["bottom"] = non_shorts[:5]
+
+    # Beach: prefer sandals/slides, demote sneakers if alternatives exist
+    if label == "beach":
+        pairs = cat_best.get("footwear", [])
+        if pairs:
+            sandals = [(it, s) for it, s in pairs if any(k in (f"{it.get('name','')} {it.get('description','')}").lower() for k in ["sandal", "slide"])]
+            if sandals:
+                others = [(it, s) for it, s in pairs if (it, s) not in sandals]
+                pairs = sandals + others
+            non_sneakers = [(it, s) for it, s in pairs if "sneaker" not in (f"{it.get('name','')} {it.get('description','')}").lower()]
+            if non_sneakers:
+                pairs = non_sneakers
+            cat_best["footwear"] = pairs[:5]
+
+    # Hiking: if cool/cold mentioned, avoid shorts; always prefer boots
+    if label == "hiking":
+        if any(k in ql for k in ["cool", "cold", "chilly"]):
+            pairs = cat_best.get("bottom", [])
+            if pairs:
+                non_shorts = [(it, s) for it, s in pairs if "short" not in (f"{it.get('name','')} {it.get('description','')}").lower()]
+                if non_shorts:
+                    cat_best["bottom"] = non_shorts[:5]
+        pairs = cat_best.get("footwear", [])
+        if pairs:
+            boots = [(it, s) for it, s in pairs if any(k in (f"{it.get('name','')} {it.get('description','')}").lower() for k in ["boot", "hiking"])]
+            if boots:
+                others = [(it, s) for it, s in pairs if (it, s) not in boots]
+                cat_best["footwear"] = (boots + others)[:5]
 
     # Required categories
     required = ["top", "bottom", "footwear"]
