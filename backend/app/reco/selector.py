@@ -33,13 +33,13 @@ def _bias_for(label: str) -> float:
 INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
     "business": {
         "top": {"prefer": ["dress shirt", "button-down", "shirt", "polo"], "avoid": ["t-shirt", "hoodie"]},
-        "bottom": {"prefer": ["chino", "dress pant", "suit pant", "trouser", "pant"], "avoid": ["short"]},
-        "footwear": {"prefer": ["loafer", "boot", "dress shoe"], "avoid": ["sneaker", "slide", "sandal", "slide", "sandal"]},
+        "bottom": {"prefer": ["chino", "dress pant", "suit pant", "trouser", "pant"], "avoid": ["short", "jogger", "fleece"]},
+        "footwear": {"prefer": ["loafer", "boot", "dress shoe"], "avoid": ["sneaker", "slide", "sandal"]},
         "layer": {"prefer": ["blazer"], "avoid": ["hoodie"]},
     },
     "formal": {
-        "top": {"prefer": ["dress shirt"], "avoid": ["t-shirt"]},
-        "bottom": {"prefer": ["suit pant", "dress pant"], "avoid": ["jean", "short"]},
+        "top": {"prefer": ["dress shirt"], "avoid": ["t-shirt", "hoodie"]},
+        "bottom": {"prefer": ["suit pant", "dress pant", "trouser"], "avoid": ["jean", "short", "jogger", "fleece"]},
         "footwear": {"prefer": ["dress shoe", "loafer"], "avoid": ["sneaker", "slide", "sandal"]},
         "layer": {"prefer": ["blazer"], "avoid": ["hoodie"]},
     },
