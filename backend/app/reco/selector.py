@@ -32,9 +32,9 @@ def _bias_for(label: str) -> float:
 # Intent-aware preferences to nudge selection toward sensible items
 INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
     "business": {
-        "top": {"prefer": ["dress shirt", "button-down", "shirt"], "avoid": ["t-shirt"]},
-        "bottom": {"prefer": ["chino", "dress pant", "suit pant", "trouser"], "avoid": ["short"]},
-        "footwear": {"prefer": ["loafer", "boot", "dress shoe"], "avoid": ["sneaker", "slide", "sandal"]},
+        "top": {"prefer": ["dress shirt", "button-down", "shirt", "polo"], "avoid": ["t-shirt", "hoodie"]},
+        "bottom": {"prefer": ["chino", "dress pant", "suit pant", "trouser", "pant"], "avoid": ["short"]},
+        "footwear": {"prefer": ["loafer", "boot", "dress shoe"], "avoid": ["sneaker", "slide", "sandal", "slide", "sandal"]},
         "layer": {"prefer": ["blazer"], "avoid": ["hoodie"]},
     },
     "formal": {
@@ -84,9 +84,11 @@ def _apply_intent_bias(label: str, category: str, name_and_desc: str, base_score
     txt = name_and_desc
     bonus = 0.0
     if prefer and any(t in txt for t in prefer):
-        bonus += 0.12
+        # Stronger bonus for formal/business where correctness matters more
+        bonus += 0.18 if label in {"business", "formal"} else 0.12
     if avoid and any(t in txt for t in avoid):
-        bonus -= 0.15
+        # Stronger penalty for obvious mismatches in business/formal
+        bonus -= 0.35 if label in {"business", "formal"} else 0.15
     return base_score + bonus
 
 
@@ -121,7 +123,28 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
             score = _apply_intent_bias(label, cat, (f"{it.get('name','')} {it.get('description','')}").lower(), raw)
             scored.append((it, score))
         scored.sort(key=lambda x: x[1], reverse=True)
-        cat_best[cat] = scored[:5]
+        cat_best[cat] = scored[:8]
+
+    # Refinement pass: enforce harder business/formal constraints if possible
+    if label in {"business", "formal"}:
+        for cat, pairs in list(cat_best.items()):
+            rules = INTENT_RULES.get(label, {}).get(cat, {})
+            if not rules:
+                continue
+            prefer = rules.get("prefer", [])
+            avoid = rules.get("avoid", [])
+            # Reorder: preferred first
+            if prefer:
+                preferred = [(it, s) for it, s in pairs if any(p in (f"{it.get('name','')} {it.get('description','')}").lower() for p in prefer)]
+                if preferred:
+                    others = [(it, s) for it, s in pairs if (it, s) not in preferred]
+                    pairs = preferred + others
+            # Filter out avoided tokens only if we still have at least one non-avoided candidate
+            if avoid:
+                non_avoided = [(it, s) for it, s in pairs if not any(a in (f"{it.get('name','')} {it.get('description','')}").lower() for a in avoid)]
+                if non_avoided:
+                    pairs = non_avoided
+            cat_best[cat] = pairs[:5]
 
     # Required categories
     required = ["top", "bottom", "footwear"]
