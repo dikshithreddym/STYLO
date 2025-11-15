@@ -98,6 +98,17 @@ def _text_tokens(text: str) -> List[str]:
 def _detect_query_type(text: str) -> str:
     """Detect if user is asking a question or requesting outfit suggestions"""
     text_lower = text.lower()
+    # Strong intent overrides: these phrases clearly imply outfit suggestions
+    strong_suggestion = [
+        "interview", "presentation", "office", "job",
+        "wedding", "ceremony", "reception",
+        "date", "dinner", "restaurant", "fancy",
+        "gym", "workout", "exercise", "fitness",
+        "beach", "hike", "hiking", "basketball", "soccer", "tennis",
+        "party", "brunch", "coffee"
+    ]
+    if any(w in text_lower for w in strong_suggestion):
+        return "suggestion"
     
     # Question patterns
     question_words = ["are there", "do i have", "what", "which", "how many", "show me", "list", "find"]
@@ -109,7 +120,11 @@ def _detect_query_type(text: str) -> str:
         return "query"
     
     # Outfit suggestion patterns
-    suggestion_words = ["suggest", "outfit", "wear", "dress", "occasion", "party", "meeting", "casual", "formal", "interview", "wedding", "date", "dinner", "gym", "workout", "beach", "hik"]
+    suggestion_words = [
+        "suggest", "outfit", "wear", "dress", "occasion",
+        "party", "meeting", "casual", "formal",
+        "interview", "wedding", "date", "dinner", "gym", "workout", "beach", "hike", "basketball"
+    ]
     if any(word in text_lower for word in suggestion_words):
         return "suggestion"
     
