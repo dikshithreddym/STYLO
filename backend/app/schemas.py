@@ -62,3 +62,4 @@ class SuggestResponse(BaseModel):
     outfit: Outfit
     alternatives: List[Outfit] = []
     notes: Optional[str] = None
+    intent: Optional[str] = Field(None, description="Resolved intent: outfit | item_search | blended_outfit_item | activity_shoes")
