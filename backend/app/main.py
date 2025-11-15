@@ -51,6 +51,15 @@ async def run_startup_migrations() -> None:
         # Do not crash app on migration failure; log for visibility
         print(f"⚠️  Migration on startup skipped/failed: {exc}")
     
+    # Pre-load sentence-transformers model to avoid cold start timeouts
+    try:
+        print("🔄 Pre-loading sentence-transformers model...")
+        from sentence_transformers import SentenceTransformer
+        _ = SentenceTransformer('all-MiniLM-L6-v2')
+        print("✅ Model pre-loaded successfully")
+    except Exception as exc:
+        print(f"⚠️  Model pre-load failed: {exc}")
+    
     # Optional: Backfill image descriptions for existing items
     # Set BACKFILL_ON_STARTUP=true in environment to enable
     if os.getenv("BACKFILL_ON_STARTUP", "false").lower() == "true":
