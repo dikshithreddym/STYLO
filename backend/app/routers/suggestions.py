@@ -97,7 +97,12 @@ def _text_tokens(text: str) -> List[str]:
 
 def _detect_query_type(text: str) -> str:
     """Detect if user is asking a question or requesting outfit suggestions"""
-    text_lower = text.lower()
+    text_lower = text.lower().strip()
+    
+    # Normalize: ignore trailing punctuation like '?' or '!'
+    import re
+    text_norm = re.sub(r"[?!\.]$", "", text_lower).strip()
+
     # Strong intent overrides: these phrases clearly imply outfit suggestions
     strong_suggestion = [
         "interview", "presentation", "office", "job",
@@ -107,16 +112,16 @@ def _detect_query_type(text: str) -> str:
         "beach", "hike", "hiking", "basketball", "soccer", "tennis",
         "party", "brunch", "coffee"
     ]
-    if any(w in text_lower for w in strong_suggestion):
+    if any(w in text_norm for w in strong_suggestion):
         return "suggestion"
     
     # Question patterns
     question_words = ["are there", "do i have", "what", "which", "how many", "show me", "list", "find"]
-    if any(word in text_lower for word in question_words):
+    if any(word in text_norm for word in question_words):
         return "query"
     
     # Item search patterns
-    if any(word in text_lower for word in ["any", "have a", "have any"]):
+    if any(word in text_norm for word in ["any", "have a", "have any"]):
         return "query"
     
     # Outfit suggestion patterns
@@ -125,13 +130,10 @@ def _detect_query_type(text: str) -> str:
         "party", "meeting", "casual", "formal",
         "interview", "wedding", "date", "dinner", "gym", "workout", "beach", "hike", "basketball"
     ]
-    if any(word in text_lower for word in suggestion_words):
+    if any(word in text_norm for word in suggestion_words):
         return "suggestion"
-    
-    # Default to query if it's a short question-like text
-    if len(text.split()) < 8 and ("?" in text or any(word in text_lower for word in ["ring", "belt", "watch", "scarf"])):
-        return "query"
-    
+
+    # Heuristic: by default, prefer suggestion mode. A trailing '?' alone should not flip to query.
     return "suggestion"
 
 
