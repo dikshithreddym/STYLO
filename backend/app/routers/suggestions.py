@@ -595,6 +595,79 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
             if shoe_items:
                 result.append(shoe_items[0])
                 used.add(shoe_items[0]["id"])
+    elif occasion in ("business", "formal"):
+        # Ensure business/formal outfits include a shirt, proper bottoms (no shorts), and formal-ish shoes
+        items = get_wardrobe_items(db)
+
+        if not any(it.get("category") == "top" for it in result):
+            if not add_if_found("Dress Shirt"):
+                if not add_if_found("Button-Down"):
+                    add_if_found("Polo")
+
+        # Bottoms: avoid shorts; prefer chinos/dress pants/suit pant then jeans
+        existing_bottoms = [it for it in result if it.get("category") == "bottom"]
+        if existing_bottoms and any("short" in it["type"].lower() for it in existing_bottoms):
+            # Remove shorts
+            result = [it for it in result if not (it.get("category") == "bottom" and "short" in it["type"].lower())]
+            used = {it["id"] for it in result}
+        
+        if not any(it.get("category") == "bottom" for it in result):
+            if not add_if_found("Chinos"):
+                if not add_if_found("Dress Pants"):
+                    if not add_if_found("Suit Pant"):
+                        add_if_found("Jeans")
+
+        # Footwear: prefer loafers/boots/sneakers; avoid slides if possible
+        existing_shoes = [it for it in result if it.get("category") == "footwear"]
+        if existing_shoes and any("slide" in it["type"].lower() for it in existing_shoes):
+            # Try to replace slides with better option
+            # Remove slides
+            result = [it for it in result if not (it.get("category") == "footwear" and "slide" in it["type"].lower())]
+            used = {it["id"] for it in result}
+            if not (add_if_found("Loafers") or add_if_found("Boots") or add_if_found("Sneakers")):
+                # Fallback to any footwear
+                shoe_items = [it for it in items if it.get("category") == "footwear" and it["id"] not in used]
+                if shoe_items:
+                    result.append(shoe_items[0])
+                    used.add(shoe_items[0]["id"])
+    elif occasion == "party":
+        # Ensure party outfits have top and bottom; add blazer if available
+        items = get_wardrobe_items(db)
+        if not any(it.get("category") == "top" for it in result):
+            if not add_if_found("Dress Shirt"):
+                if not add_if_found("Button-Down"):
+                    if not add_if_found("Polo"):
+                        tops = [it for it in items if it.get("category") == "top" and it["id"] not in used]
+                        if tops:
+                            result.append(tops[0])
+                            used.add(tops[0]["id"])
+        if not any(it.get("category") == "bottom" for it in result):
+            if not add_if_found("Chinos"):
+                if not add_if_found("Suit Pant"):
+                    if not add_if_found("Jeans"):
+                        bottoms = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+                        if bottoms:
+                            result.append(bottoms[0])
+                            used.add(bottoms[0]["id"])
+        if not any(it.get("category") == "layer" for it in result):
+            add_if_found("Blazer", "layer")
+
+    # Activity/weather normalization for bottoms: prefer shorts for workout/sport/beach/hot
+    if occasion != "formal" and occasion != "business":
+        act = activity or _detect_activity(query_tokens)
+        prefer_shorts = (act in ("workout", "run", "sport", "beach")) or (weather == "hot")
+        if prefer_shorts:
+            bottom = next((it for it in result if it.get("category") == "bottom"), None)
+            if (not bottom) or ("jean" in bottom["type"].lower() and "short" not in bottom["type"].lower()):
+                # Replace jeans with shorts if available
+                items = get_wardrobe_items(db)
+                shorts = [it for it in items if it.get("category") == "bottom" and "short" in it["type"].lower() and it["id"] not in used]
+                if shorts:
+                    # Remove existing bottom if any
+                    result = [it for it in result if it.get("category") != "bottom"]
+                    used = {it["id"] for it in result}
+                    result.append(shorts[0])
+                    used.add(shorts[0]["id"])
     
     # Accessories handling: for active contexts keep functional items (exclude jewelry like rings)
     items = get_wardrobe_items(db)
