@@ -17,4 +17,11 @@ pip install --prefer-binary python-dotenv==1.0.0
 pip install --prefer-binary sqlalchemy==2.0.23
 pip install --prefer-binary psycopg2-binary==2.9.9
 
+echo "Installing AI/ML dependencies for v2 suggestions..."
+pip install --prefer-binary requests==2.31.0
+pip install --prefer-binary sentence-transformers==2.7.0
+pip install --prefer-binary numpy==1.26.4
+pip install --prefer-binary webcolors==1.13
+pip install --prefer-binary colormath==3.0.0
+
 echo "Build completed successfully!"
