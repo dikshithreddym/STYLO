@@ -55,11 +55,11 @@ COLOR_SYNONYMS = {
 }
 
 OCCASION_KEYWORDS = {
-    "formal": {"formal", "wedding", "ceremony", "black tie", "reception"},
-    "business": {"business", "office", "interview", "meeting", "work"},
-    "smart casual": {"smart", "smart casual", "semi-formal"},
-    "party": {"party", "night out", "club", "birthday", "celebration"},
-    "casual": {"casual", "hangout", "weekend", "everyday", "relaxed", "any"},
+    "formal": {"formal", "wedding", "ceremony", "black tie", "reception", "gala"},
+    "business": {"business", "office", "interview", "corporate", "professional"},
+    "smart casual": {"smart", "smart casual", "semi-formal", "upscale"},
+    "party": {"party", "night out", "club", "birthday", "celebration", "cocktail"},
+    "casual": {"casual", "hangout", "weekend", "everyday", "relaxed", "any", "coffee", "brunch", "errands", "comfortable"},
 }
 
 WEATHER_KEYWORDS = {
@@ -216,9 +216,16 @@ def _color_matches(item_color: str, preferred_colors: List[str]) -> bool:
 
 def _detect_occasion(tokens: List[str]) -> str:
     token_set = set(tokens)
+    
+    # Check for explicit casual keywords first (higher priority)
+    if token_set & OCCASION_KEYWORDS["casual"]:
+        return "casual"
+    
+    # Then check other occasions
     for name, keys in OCCASION_KEYWORDS.items():
-        if token_set & keys:
+        if name != "casual" and token_set & keys:
             return name
+    
     # default
     return "casual"
 
