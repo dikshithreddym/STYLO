@@ -351,15 +351,20 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                     result.append(top_items[0])
                     used.add(top_items[0]["id"])
             
-            # Add bottoms - prefer Chinos/Jeans
+            # Add bottoms - prefer Chinos/Jeans for party
             if not add_if_found("Chinos"):
                 if not add_if_found("Jeans"):
-                    # Fallback to any bottom
-                    items = get_wardrobe_items(db)
-                    bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
-                    if bottom_items:
-                        result.append(bottom_items[0])
-                        used.add(bottom_items[0]["id"])
+                    if not add_if_found("Suit Pant"):
+                        # Fallback to any bottom
+                        items = get_wardrobe_items(db)
+                        bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+                        if bottom_items:
+                            result.append(bottom_items[0])
+                            used.add(bottom_items[0]["id"])
+            
+            # Add blazer/layer for elevated party look if available
+            if not any(it.get("category") == "layer" for it in result):
+                add_if_found("Blazer", "layer")
     else:
         # casual default - MUST have a top
         # For workout/gym activity, prefer athletic wear
@@ -385,13 +390,22 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                         used.add(tshirts[0]["id"])
                         top_added = True
             
-            # For bottoms, prefer shorts
-            if not add_if_found("Shorts"):
+            # For bottoms, prefer shorts for workouts
+            bottom_added = add_if_found("Shorts")
+            if not bottom_added:
                 items = get_wardrobe_items(db)
                 shorts = [it for it in items if "short" in it["type"].lower() and it["category"] == "bottom" and it["id"] not in used]
                 if shorts:
                     result.append(shorts[0])
                     used.add(shorts[0]["id"])
+                    bottom_added = True
+                else:
+                    # If no shorts available, use any bottom but note it's not ideal for workout
+                    bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+                    if bottom_items:
+                        result.append(bottom_items[0])
+                        used.add(bottom_items[0]["id"])
+                        bottom_added = True
         else:
             # Regular casual - Try T-Shirt first (contains match will find any T-shirt variant)
             top_added = add_if_found("T-Shirt")
@@ -420,23 +434,42 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
                         used.add(top_items[0]["id"])
                         top_added = True
         
-        # Add bottoms
-        if not add_if_found("Jeans"):
-            # Try any bottom if no Jeans found
-            items = get_wardrobe_items(db)
-            bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
-            if bottom_items:
-                if colors:
-                    color_matched = [it for it in bottom_items if _color_matches(it["color"], colors)]
-                    if color_matched:
-                        result.append(color_matched[0])
-                        used.add(color_matched[0]["id"])
+        # Add bottoms only if not already added by activity-specific logic
+        has_bottom = any(it.get("category") == "bottom" for it in result)
+        if not has_bottom:
+            # For hot weather or beach, prefer shorts
+            if weather == "hot" or activity == "beach":
+                if not add_if_found("Shorts"):
+                    items = get_wardrobe_items(db)
+                    shorts = [it for it in items if "short" in it["type"].lower() and it["category"] == "bottom" and it["id"] not in used]
+                    if shorts:
+                        result.append(shorts[0])
+                        used.add(shorts[0]["id"])
                     else:
-                        result.append(bottom_items[0])
-                        used.add(bottom_items[0]["id"])
-                else:
-                    result.append(bottom_items[0])
-                    used.add(bottom_items[0]["id"])
+                        # Fallback to jeans if no shorts
+                        if not add_if_found("Jeans"):
+                            bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+                            if bottom_items:
+                                result.append(bottom_items[0])
+                                used.add(bottom_items[0]["id"])
+            else:
+                # Normal weather - prefer jeans
+                if not add_if_found("Jeans"):
+                    # Try any bottom if no Jeans found
+                    items = get_wardrobe_items(db)
+                    bottom_items = [it for it in items if it.get("category") == "bottom" and it["id"] not in used]
+                    if bottom_items:
+                        if colors:
+                            color_matched = [it for it in bottom_items if _color_matches(it["color"], colors)]
+                            if color_matched:
+                                result.append(color_matched[0])
+                                used.add(color_matched[0]["id"])
+                            else:
+                                result.append(bottom_items[0])
+                                used.add(bottom_items[0]["id"])
+                        else:
+                            result.append(bottom_items[0])
+                            used.add(bottom_items[0]["id"])
         
         # ALWAYS try to add shoes for casual outfits
         # Try specific shoe types first, then any shoe by category
@@ -537,23 +570,6 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
             if shoe_items:
                 result.append(shoe_items[0])
                 used.add(shoe_items[0]["id"])
-    
-    # Weather-specific adjustments for casual outfits
-    if occasion == "casual" and weather == "hot":
-        # In hot weather, prefer shorts over jeans
-        has_shorts = any("short" in it["type"].lower() for it in result)
-        has_jeans = any("jeans" in it["type"].lower() or "jean" in it["type"].lower() for it in result)
-        
-        if has_jeans and not has_shorts:
-            # Try to replace jeans with shorts
-            items = get_wardrobe_items(db)
-            shorts = [it for it in items if "short" in it["type"].lower() and it["category"] == "bottom" and it["id"] not in used]
-            if shorts:
-                # Remove jeans
-                result = [it for it in result if "jeans" not in it["type"].lower() and "jean" not in it["type"].lower()]
-                # Add shorts
-                result.append(shorts[0])
-                used.add(shorts[0]["id"])
     
     # Accessories handling: for active contexts keep functional items (exclude jewelry like rings)
     items = get_wardrobe_items(db)
