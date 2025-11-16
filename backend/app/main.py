@@ -4,11 +4,25 @@ from app.routers import wardrobe_db as wardrobe
 from app.routers import suggestions
 from app.routers import suggestions_v2
 from app.database import engine, Base
+from sqlalchemy import create_engine
 from datetime import datetime
 import os
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+
+# Optimize SQLAlchemy connection pooling
+# You can adjust pool_size and pool_recycle as needed
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=10,           # Number of connections to keep in the pool
+        max_overflow=20,        # Number of connections allowed above pool_size
+        pool_recycle=1800,      # Recycle connections after 30 minutes
+        pool_pre_ping=True      # Check connection health before using
+    )
+    Base.metadata.create_all(bind=engine)
+else:
+    Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="STYLO API",
@@ -60,8 +74,8 @@ async def run_startup_migrations() -> None:
     except Exception as exc:
         print(f"⚠️  Model pre-load failed: {exc}")
     
-    # Optional: Backfill image descriptions for existing items
-    # Set BACKFILL_ON_STARTUP=true in environment to enable
+    # Backfill will only run if BACKFILL_ON_STARTUP=true is set in environment
+    # This avoids running backfill on every startup unless explicitly required
     if os.getenv("BACKFILL_ON_STARTUP", "false").lower() == "true":
         try:
             print("🔄 Running image description backfill...")
@@ -107,23 +121,23 @@ async def trigger_backfill():
 @app.post("/admin/update-category-to-footwear")
 async def update_category_to_footwear():
     """Admin endpoint to update all 'shoes' category items to 'footwear'"""
+    import asyncio
     try:
         from app.database import SessionLocal
         from app.models import WardrobeItem
-        
-        db = SessionLocal()
-        updated_count = 0
-        
-        # Find all items with 'shoes' category
-        items = db.query(WardrobeItem).filter(WardrobeItem.category == 'shoes').all()
-        
-        for item in items:
-            item.category = 'footwear'
-            updated_count += 1
-        
-        db.commit()
-        db.close()
-        
+
+        def update_items():
+            db = SessionLocal()
+            updated_count = 0
+            items = db.query(WardrobeItem).filter(WardrobeItem.category == 'shoes').all()
+            for item in items:
+                item.category = 'footwear'
+                updated_count += 1
+            db.commit()
+            db.close()
+            return updated_count
+
+        updated_count = await asyncio.get_event_loop().run_in_executor(None, update_items)
         return {
             "status": "success",
             "message": f"Updated {updated_count} items from 'shoes' to 'footwear'",
