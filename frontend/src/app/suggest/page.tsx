@@ -48,31 +48,32 @@ export default function SuggestPage() {
     if (!item) return null
     
     return (
-      <div key={item.id} className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
-        <div className="relative h-56 sm:h-64 bg-gradient-to-br from-gray-100 to-gray-200">
+      <div key={item.id} className="group bg-white rounded-xl sm:rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
+        <div className="relative h-48 sm:h-56 md:h-64 bg-gradient-to-br from-gray-100 to-gray-200">
           {item.image_url && (
             <Image 
               src={item.image_url} 
               alt={`${item.name}`} 
               fill 
               className="object-cover group-hover:scale-110 transition-transform duration-500" 
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 20vw"
             />
           )}
-          <div className="absolute top-2 left-2 px-2 py-1 bg-black/70 text-white text-xs font-medium rounded-lg backdrop-blur-sm">
+          <div className="absolute top-2 left-2 px-2 py-1 bg-black/70 text-white text-xs font-medium rounded-md sm:rounded-lg backdrop-blur-sm">
             {label}
           </div>
         </div>
-        <div className="p-4">
-          <h3 className="font-semibold text-lg text-gray-900">{item.name}</h3>
+        <div className="p-3 sm:p-4">
+          <h3 className="font-semibold text-base sm:text-lg text-gray-900 line-clamp-2">{item.name}</h3>
           <div className="flex items-center gap-2 mt-1">
             {item.color && item.color !== 'Unknown' && (
               <>
-                <span className="inline-block w-3 h-3 rounded-full border border-gray-300 shadow-sm" style={{ backgroundColor: getColorHex(item.color) }}></span>
-                <p className="text-gray-600 text-sm">{item.color}</p>
+                <span className="inline-block w-3 h-3 rounded-full border border-gray-300 shadow-sm flex-shrink-0" style={{ backgroundColor: getColorHex(item.color) }}></span>
+                <p className="text-gray-600 text-xs sm:text-sm truncate">{item.color}</p>
               </>
             )}
           </div>
-          <span className="inline-block mt-2 px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-lg font-medium">{item.category}</span>
+          <span className="inline-block mt-2 px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-md sm:rounded-lg font-medium">{item.category}</span>
         </div>
       </div>
     )
@@ -96,33 +97,33 @@ export default function SuggestPage() {
     const rationale = outfit.rationale || 'Outfit selected from your wardrobe.'
 
     return (
-      <div key={index} className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+      <div key={index} className="mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
           {index > 0 ? (
-            <h3 className="text-xl font-bold text-gray-900">Alternative #{index}</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-gray-900">Alternative #{index}</h3>
           ) : (
-            <h3 className="text-xl font-bold text-gray-900">Top Suggestion</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-gray-900">Top Suggestion</h3>
           )}
-          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border ${scoreBg} ${scoreColor}`}>
+          <div className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold border ${scoreBg} ${scoreColor} self-start sm:self-auto`}>
             {score >= 90 && (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
             )}
             <span>{score.toFixed(0)}% Match</span>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6 mb-3 sm:mb-4">
           {items.map(({ item, label }) => renderOutfitItem(item, label))}
         </div>
-        <div className={`mt-4 p-4 rounded-lg border ${scoreBg}`}>
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+        <div className={`mt-3 sm:mt-4 p-3 sm:p-4 rounded-lg border ${scoreBg}`}>
+          <div className="flex items-start gap-2 sm:gap-3">
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
-            <div className="flex-1">
-              <h4 className="text-sm font-semibold text-gray-900 mb-1">Why this outfit?</h4>
-              <p className="text-sm text-gray-700 leading-relaxed">{rationale}</p>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs sm:text-sm font-semibold text-gray-900 mb-1">Why this outfit?</h4>
+              <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">{rationale}</p>
             </div>
           </div>
         </div>
@@ -131,38 +132,38 @@ export default function SuggestPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="container mx-auto px-4">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900">AI Outfit Suggestions</h1>
-          <p className="text-gray-600">Describe your occasion, and our AI will suggest intelligent outfits using semantic matching and color harmony.</p>
+    <div className="min-h-screen bg-gray-50 py-6 sm:py-12">
+      <div className="container mx-auto px-4 sm:px-6">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">AI Outfit Suggestions</h1>
+          <p className="text-sm sm:text-base text-gray-600 leading-relaxed">Describe your occasion, and our AI will suggest intelligent outfits using semantic matching and color harmony.</p>
         </div>
 
         <Card>
-          <form onSubmit={onSubmit} className="p-6">
+          <form onSubmit={onSubmit} className="p-4 sm:p-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">Your prompt</label>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
-              className="w-full h-28 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-              placeholder="e.g., Business meeting at a tech company, Gym workout session, Date night at a fancy restaurant"
+              className="w-full h-24 sm:h-28 px-3 sm:px-4 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 resize-none"
+              placeholder="e.g., Business meeting, Gym workout, Date night"
             />
             <div className="mt-4">
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading} className="w-full sm:w-auto">
                 {loading ? 'Analyzing…' : 'Get AI Suggestions'}
               </Button>
             </div>
             {error && (
-              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <div className="mt-4 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                   </svg>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-medium text-red-800 mb-1">Unable to Generate Outfit</h3>
-                    <p className="text-sm text-red-700">{error}</p>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-xs sm:text-sm font-medium text-red-800 mb-1">Unable to Generate Outfit</h3>
+                    <p className="text-xs sm:text-sm text-red-700 break-words">{error}</p>
                     {error.includes('empty') || error.includes('Not enough') ? (
-                      <p className="text-sm text-red-600 mt-2">
+                      <p className="text-xs sm:text-sm text-red-600 mt-2">
                         💡 Tip: <a href="/wardrobe" className="underline font-medium hover:text-red-800">Add more items to your wardrobe</a> to get outfit suggestions.
                       </p>
                     ) : null}
@@ -174,30 +175,32 @@ export default function SuggestPage() {
         </Card>
 
         {result && (
-          <div className="mt-8 sm:mt-10">
-            <div className="mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">AI-Powered Suggestions</h2>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-full text-sm font-medium shadow-md">
-                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                    <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-                  </svg>
-                  Intent: {result.intent}
+          <div className="mt-6 sm:mt-8 md:mt-10">
+            <div className="mb-4 sm:mb-6">
+              <div className="flex flex-col gap-3 sm:gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">AI-Powered Suggestions</h2>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-full text-xs sm:text-sm font-medium shadow-md self-start sm:self-auto">
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                      <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+                    </svg>
+                    <span className="hidden xs:inline">Intent: </span>{result.intent}
+                  </div>
                 </div>
+                <p className="text-gray-600 text-xs sm:text-sm md:text-base leading-relaxed">
+                  Based on your query, our AI detected a <span className="font-semibold text-gray-900">{result.intent}</span> occasion and selected items using semantic matching, color harmony, and intent-aware rules.
+                </p>
               </div>
-              <p className="text-gray-600 mt-2 text-sm sm:text-base">
-                Based on your query, our AI detected a <span className="font-semibold text-gray-900">{result.intent}</span> occasion and selected items using semantic matching, color harmony, and intent-aware rules.
-              </p>
             </div>
 
             {result.outfits.length === 0 ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 sm:p-12 text-center">
-                <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 md:p-12 text-center">
+                <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <p className="text-gray-600 text-lg">No suitable items found in your wardrobe.</p>
-                <p className="text-gray-500 text-sm mt-2">Try adding more items or adjusting your prompt.</p>
+                <p className="text-gray-600 text-base sm:text-lg">No suitable items found in your wardrobe.</p>
+                <p className="text-gray-500 text-xs sm:text-sm mt-2">Try adding more items or adjusting your prompt.</p>
               </div>
             ) : (
               <div>

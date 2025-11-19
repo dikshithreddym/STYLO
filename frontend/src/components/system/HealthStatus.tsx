@@ -23,17 +23,17 @@ export default function HealthStatus() {
 
   if (status === 'loading') {
     return (
-      <div className="rounded-lg px-4 py-2 text-sm bg-gray-100 text-gray-600">Checking API health…</div>
+      <div className="rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-gray-100 text-gray-600">Checking API health…</div>
     )
   }
 
   if (status === 'ok') {
     return (
-      <div className="rounded-lg px-4 py-2 text-sm bg-green-100 text-green-800">Backend API: Healthy</div>
+      <div className="rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-green-100 text-green-800">Backend API: Healthy</div>
     )
   }
 
   return (
-    <div className="rounded-lg px-4 py-2 text-sm bg-red-100 text-red-800">Backend API: Down</div>
+    <div className="rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-red-100 text-red-800">Backend API: Down</div>
   )
 }
