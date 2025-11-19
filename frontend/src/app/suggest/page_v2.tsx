@@ -89,14 +89,37 @@ export default function SuggestPage() {
 
     if (items.length === 0) return null
 
+    const scoreColor = outfit.score >= 90 ? 'text-green-600' : outfit.score >= 70 ? 'text-yellow-600' : 'text-orange-600'
+    const scoreBg = outfit.score >= 90 ? 'bg-green-50 border-green-200' : outfit.score >= 70 ? 'bg-yellow-50 border-yellow-200' : 'bg-orange-50 border-orange-200'
+
     return (
       <div key={index} className="mb-8">
-        {index > 0 && (
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Alternative #{index}</h3>
-        )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6">
+        <div className="flex items-center justify-between mb-4">
+          {index > 0 ? (
+            <h3 className="text-xl font-bold text-gray-900">Alternative #{index}</h3>
+          ) : (
+            <h3 className="text-xl font-bold text-gray-900">Top Suggestion</h3>
+          )}
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border ${scoreBg} ${scoreColor}`}>
+            <span>{outfit.score.toFixed(0)}% Match</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6 mb-4">
           {items.map(({ item, label }) => renderOutfitItem(item, label))}
         </div>
+        {outfit.rationale && (
+          <div className={`mt-4 p-4 rounded-lg border ${scoreBg}`}>
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-gray-900 mb-1">Why this outfit?</h4>
+                <p className="text-sm text-gray-700">{outfit.rationale}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }

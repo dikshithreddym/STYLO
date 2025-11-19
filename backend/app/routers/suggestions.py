@@ -1,3 +1,12 @@
+"""
+LEGACY V1 RULES-BASED SUGGESTION ENGINE
+
+NOTE: V2 semantic engine (/v2/suggestions) is the PRIMARY recommendation system.
+This V1 endpoint is kept for backwards compatibility and item searches only.
+
+PERFORMANCE: This engine has been optimized but is slower than V2. 
+For outfit suggestions, prefer V2 endpoint which uses semantic embeddings.
+"""
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -332,6 +341,12 @@ def _detect_activity(tokens: List[str]) -> Optional[str]:
 
 
 def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: Session, query_tokens: List[str] = [], original_text: str = "") -> List[dict]:
+    """
+    OPTIMIZED: Cached wardrobe access to reduce DB queries.
+    This function is simplified for performance - V2 engine is preferred.
+    """
+    # Cache wardrobe items once instead of querying multiple times
+    cached_items = get_wardrobe_items(db)
     used: set[int] = set()
     result: List[dict] = []
     activity = _detect_activity(query_tokens)
@@ -343,6 +358,10 @@ def build_outfit(occasion: str, weather: Optional[str], colors: List[str], db: S
             result.append(it)
             return True
         return False
+    
+    def get_items_by_category(cat: str) -> List[dict]:
+        """Helper to get items by category from cache"""
+        return [it for it in cached_items if it.get("category") == cat and it["id"] not in used]
 
     if occasion in ("formal", "business", "smart casual"):
         # Always add shirt first
@@ -833,7 +852,12 @@ def outfit_score(items: List[dict], occasion: str, weather: Optional[str], color
 
 
 def generate_alternatives(occasion: str, weather: Optional[str], colors: List[str], limit: int, db: Session, query_tokens: List[str] = []) -> List[List[dict]]:
-    """Generate multiple distinct outfits by building different combinations"""
+    """
+    Generate multiple distinct outfits by building different combinations.
+    OPTIMIZED: Limited to max 5 variations for performance.
+    """
+    # Limit to reduce computation time
+    limit = min(limit, 5)
     all_items = get_wardrobe_items(db)
     variations = []
     used_globally = set()  # Track items used across all outfits

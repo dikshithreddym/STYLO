@@ -79,6 +79,8 @@ export interface V2Outfit {
   footwear: V2Item | null
   outerwear: V2Item | null
   accessories: V2Item | null
+  score: number  // Outfit match score (0-100%)
+  rationale?: string | null  // Reason why this outfit was selected
 }
 
 export interface V2SuggestResponse {
