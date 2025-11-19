@@ -8,8 +8,8 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // Increase default timeout to better handle free-tier cold starts and warmups
-  timeout: 60000, // 60 seconds
+  // Increase default timeout to better handle free-tier cold starts, warmups, and Gemini API calls
+  timeout: 120000, // 120 seconds (2 minutes) - increased for Gemini API calls
 })
 
 // Response interceptor for error handling

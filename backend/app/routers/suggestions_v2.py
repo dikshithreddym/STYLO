@@ -153,13 +153,34 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
             image_url=d.get("image_url"),
         )
 
+    # OPTIMIZATION: Cache embedding resources outside the scoring loop
+    # This prevents re-encoding the query vector for every outfit (expensive operation)
+    cached_qv = None
+    cached_emb = None
+    if not used_gemini:
+        try:
+            from ..reco.embedding import Embedder
+            cached_emb = Embedder.instance()
+            cached_qv = cached_emb.encode([text])[0]
+        except Exception:
+            # If embedding fails, skip semantic scoring
+            cached_qv = None
+            cached_emb = None
+
     # Score and generate rationale for each outfit
-    def score_outfit(outfit_dict: dict, query: str, intent_label: str) -> tuple[float, str]:
+    def score_outfit(outfit_dict: dict, query: str, intent_label: str, qv=None, emb=None) -> tuple[float, str]:
         """
         Score outfit match (0-100%) and generate rationale.
         
+        Args:
+            outfit_dict: Outfit dictionary with category -> item mapping
+            query: User's query text
+            intent_label: Detected intent (business, casual, etc.)
+            qv: Cached query vector (to avoid re-encoding)
+            emb: Cached embedder instance
+        
         Returns:
-            (score: float 0-1.0, rationale: str)
+            (score: float 0-100, rationale: str)
         """
         # Calculate completeness score
         required_cats = {"top", "bottom", "footwear"}
@@ -167,13 +188,9 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         completeness = len(present_cats) / len(required_cats)  # 0-1.0
         
         # Calculate semantic match score (if using semantic engine)
-        if not used_gemini:
-            # For semantic engine, use embedding similarity
-            from ..reco.embedding import Embedder
+        if not used_gemini and qv is not None and emb is not None:
+            # For semantic engine, use cached embedding similarity
             from ..reco.color_matcher import infer_palette, palette_score
-            
-            emb = Embedder.instance()
-            qv = emb.encode([query])[0]
             
             item_texts = [
                 f"{outfit_dict.get(cat, {}).get('name', '')} {outfit_dict.get(cat, {}).get('description', '')}".strip()
@@ -197,9 +214,9 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
             # Combined score: completeness (40%), semantic (40%), color (20%)
             total_score = 0.4 * completeness + 0.4 * semantic_score + 0.2 * color_score
         else:
+            # For Gemini or if embedding unavailable, use simpler scoring
             # For Gemini, assume high match (Gemini handles matching internally)
-            # Could enhance with post-scoring if needed
-            total_score = 0.95 * completeness + 0.05  # High confidence if Gemini selected it
+            total_score = 0.95 * completeness + 0.05 if used_gemini else 0.8 * completeness + 0.2
         
         # Generate rationale
         rationale_parts = []
@@ -258,7 +275,8 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     
     v2_outfits: List[V2Outfit] = []
     for o in outfits_raw:
-        score, rationale = score_outfit(o, text, intent.label)
+        # Pass cached query vector and embedder to avoid re-encoding for each outfit
+        score, rationale = score_outfit(o, text, intent.label, cached_qv, cached_emb)
         v2_outfits.append(
             V2Outfit(
                 top=to_v2item(o["top"]) if "top" in o else None,
