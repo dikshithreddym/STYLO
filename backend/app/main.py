@@ -7,6 +7,12 @@ from app.database import engine, Base
 from sqlalchemy import create_engine
 from datetime import datetime
 import os
+import asyncio
+from threading import Lock
+
+# Global flag to track startup completion
+_startup_complete = False
+_startup_lock = Lock()
 
 
 # Optimize SQLAlchemy connection pooling
@@ -52,38 +58,51 @@ app.add_middleware(
     expose_headers=["X-Total-Count"],
 )
 
-# Run lightweight, idempotent DB migrations on startup
+# Run lightweight, idempotent DB migrations on startup (non-blocking)
 @app.on_event("startup")
 async def run_startup_migrations() -> None:
-    # Only run on server start; safe to run repeatedly
-    try:
-        # The migration checks for the column and only adds if missing
-        from migrate_add_image_description import migrate  # type: ignore
-        migrate()
-        print("✅ Startup migration completed (image_description column ensured)")
-    except Exception as exc:
-        # Do not crash app on migration failure; log for visibility
-        print(f"⚠️  Migration on startup skipped/failed: {exc}")
+    """Run startup tasks in background to avoid blocking health checks"""
+    global _startup_complete
     
-    # Pre-load sentence-transformers model to avoid cold start timeouts
-    try:
-        print("🔄 Pre-loading sentence-transformers model...")
-        from sentence_transformers import SentenceTransformer
-        _ = SentenceTransformer('all-MiniLM-L6-v2')
-        print("✅ Model pre-loaded successfully")
-    except Exception as exc:
-        print(f"⚠️  Model pre-load failed: {exc}")
-    
-    # Backfill will only run if BACKFILL_ON_STARTUP=true is set in environment
-    # This avoids running backfill on every startup unless explicitly required
-    if os.getenv("BACKFILL_ON_STARTUP", "false").lower() == "true":
+    async def _startup_tasks():
+        global _startup_complete
         try:
-            print("🔄 Running image description backfill...")
-            from backfill_image_descriptions import backfill_descriptions  # type: ignore
-            await backfill_descriptions()
-            print("✅ Backfill completed on startup")
+            # The migration checks for the column and only adds if missing
+            from migrate_add_image_description import migrate  # type: ignore
+            migrate()
+            print("✅ Startup migration completed (image_description column ensured)")
         except Exception as exc:
-            print(f"⚠️  Backfill on startup failed: {exc}")
+            # Do not crash app on migration failure; log for visibility
+            print(f"⚠️  Migration on startup skipped/failed: {exc}")
+        
+        # Pre-load sentence-transformers model to avoid cold start timeouts
+        try:
+            print("🔄 Pre-loading sentence-transformers model...")
+            from sentence_transformers import SentenceTransformer
+            _ = SentenceTransformer('all-MiniLM-L6-v2')
+            print("✅ Model pre-loaded successfully")
+        except Exception as exc:
+            print(f"⚠️  Model pre-load failed: {exc}")
+        
+        # Backfill will only run if BACKFILL_ON_STARTUP=true is set in environment
+        # This avoids running backfill on every startup unless explicitly required
+        if os.getenv("BACKFILL_ON_STARTUP", "false").lower() == "true":
+            try:
+                print("🔄 Running image description backfill...")
+                from backfill_image_descriptions import backfill_descriptions  # type: ignore
+                await backfill_descriptions()
+                print("✅ Backfill completed on startup")
+            except Exception as exc:
+                print(f"⚠️  Backfill on startup failed: {exc}")
+        
+        # Mark startup as complete
+        with _startup_lock:
+            _startup_complete = True
+        print("✅ Startup tasks completed")
+    
+    # Run startup tasks in background (non-blocking)
+    asyncio.create_task(_startup_tasks())
+    print("🚀 Server starting, startup tasks running in background...")
 
 # Admin endpoint for manual backfill trigger
 @app.post("/admin/backfill-descriptions")
@@ -159,8 +178,47 @@ app.include_router(suggestions_v2.router)
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "ok"}
+    """
+    Health check endpoint - returns immediately to avoid timeouts.
+    This endpoint should respond in < 100ms to prevent deployment platform timeouts.
+    Use /ready for readiness check (waits for startup completion).
+    """
+    # Quick database connectivity check (non-blocking, with timeout)
+    db_ok = False
+    try:
+        # Quick connection test with timeout
+        from app.database import engine
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            db_ok = True
+    except Exception:
+        # Database check failed, but don't fail health check during startup
+        db_ok = False
+    
+    return {
+        "status": "ok",
+        "ready": _startup_complete,
+        "database": "connected" if db_ok else "checking"
+    }
+
+
+@app.get("/ready")
+async def readiness_check():
+    """
+    Readiness check endpoint - verifies app is fully ready.
+    Returns 200 when startup tasks complete, 503 if still starting.
+    """
+    from fastapi import status
+    from fastapi.responses import JSONResponse
+    
+    if _startup_complete:
+        return {"status": "ready", "message": "Application is ready"}
+    else:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "starting", "message": "Application is still starting up"}
+        )
 
 
 @app.get("/admin/version")

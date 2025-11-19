@@ -38,7 +38,7 @@ def _bias_for(label: str) -> float:
         "party": 0.04,       # Moderate boost for party/social outfits
         "casual": 0.03,      # Lower bias (already common, less need to boost)
         "workout": 0.05,     # Boost for athletic/active wear
-        "beach": 0.04,       # Moderate boost for beach/vacation outfits
+        "beach": 0.06,       # Increased boost for beach/vacation/swimming outfits
         "hiking": 0.02,      # Lower bias (specific use case)
     }
     return BIAS.get(label, 0.02)
@@ -81,8 +81,8 @@ INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
     "beach": {
         "top": {"prefer": ["t-shirt"], "avoid": ["dress shirt"]},
         "bottom": {"prefer": ["short"], "avoid": ["jean", "chino"]},
-        "footwear": {"prefer": ["sandal", "slide", "flip"], "avoid": ["loafer", "dress", "sneaker", "nike", "adidas"]},
-        "layer": {"avoid": ["blazer", "sweater"]},
+        "footwear": {"prefer": ["sandal", "slide", "flip", "flip-flop"], "avoid": ["loafer", "dress", "dress shoe", "lace up", "lace-up", "oxford", "derby", "formal", "sneaker", "nike", "adidas", "boot", "heel"]},
+        "layer": {"prefer": ["light", "windbreaker", "cover-up"], "avoid": ["blazer", "sweater", "suede", "heavy", "winter", "wool", "fleece", "racer"]},
     },
     "party": {
         "top": {"prefer": ["dress shirt", "button-down"], "avoid": []},
@@ -133,9 +133,9 @@ def _apply_intent_bias(label: str, category: str, name_and_desc: str, base_score
         # TUNE THIS: Increase 0.18/0.12 to make preferred items rank higher
         bonus += 0.18 if label in {"business", "formal"} else 0.12
     if avoid and any(t in txt for t in avoid):
-        # Stronger penalty for obvious mismatches in business/formal
+        # Stronger penalty for obvious mismatches in business/formal/beach
         # TUNE THIS: Increase 0.35/0.15 to more strictly exclude avoided items
-        bonus -= 0.35 if label in {"business", "formal"} else 0.15
+        bonus -= 0.35 if label in {"business", "formal", "beach"} else 0.15
     return base_score + bonus
 
 
@@ -212,6 +212,28 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
                     pairs = blazers + others
             cat_best[cat] = pairs[:5]
 
+    # Hard filter for beach: block dress shoes, formal footwear, heavy jackets
+    if label == "beach":
+        BEACH_HARD_AVOID_FOOTWEAR = ["dress shoe", "dress", "lace up", "lace-up", "oxford", "derby", "formal", "heel", "boot", "loafer", "dress boot"]
+        BEACH_HARD_AVOID_LAYER = ["suede", "wool", "heavy", "winter", "fleece", "racer jacket", "blazer", "sweater", "cardigan", "coat"]
+        BEACH_HARD_PREFER_FOOTWEAR = ["sandal", "slide", "flip", "flip-flop", "beach"]
+        for cat, pairs in list(cat_best.items()):
+            if cat == "footwear":
+                # Remove all formal/dress shoes
+                filtered = [(it, s) for it, s in pairs if not any(a in (f"{it.get('name','')} {it.get('description','')}").lower() for a in BEACH_HARD_AVOID_FOOTWEAR)]
+                # Prefer sandals/slides
+                preferred = [(it, s) for it, s in filtered if any(p in (f"{it.get('name','')} {it.get('description','')}").lower() for p in BEACH_HARD_PREFER_FOOTWEAR)]
+                if preferred:
+                    pairs = preferred + [x for x in filtered if x not in preferred]
+                elif filtered:
+                    pairs = filtered
+                cat_best[cat] = pairs[:5]
+            elif cat == "layer":
+                # Remove heavy/warm jackets
+                filtered = [(it, s) for it, s in pairs if not any(a in (f"{it.get('name','')} {it.get('description','')}").lower() for a in BEACH_HARD_AVOID_LAYER)]
+                if filtered:
+                    cat_best[cat] = filtered[:5]
+
     # Party at night: demote shorts and hoodies if alternatives exist
     ql = (query or "").lower()
     if label == "party" and ("night" in ql or "evening" in ql):
@@ -226,17 +248,24 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
             if non_hoodie:
                 cat_best["layer"] = non_hoodie[:5]
 
-    # Beach: prefer sandals/slides, demote brand sneakers if alternatives exist
+    # Beach: prefer sandals/slides, strictly avoid dress shoes and formal footwear
     if label == "beach":
         pairs = cat_best.get("footwear", [])
         if pairs:
-            sandals = [(it, s) for it, s in pairs if any(k in (f"{it.get('name','')} {it.get('description','')}").lower() for k in ["sandal", "slide"])]
+            # First, remove any formal/dress shoes that might have slipped through
+            formal_keywords = ["dress shoe", "dress", "lace up", "lace-up", "oxford", "derby", "formal", "heel", "boot", "loafer"]
+            pairs = [(it, s) for it, s in pairs if not any(k in (f"{it.get('name','')} {it.get('description','')}").lower() for k in formal_keywords)]
+            
+            # Strongly prefer sandals/slides/flip-flops
+            sandals = [(it, s) for it, s in pairs if any(k in (f"{it.get('name','')} {it.get('description','')}").lower() for k in ["sandal", "slide", "flip", "flip-flop", "beach"])]
             if sandals:
                 others = [(it, s) for it, s in pairs if (it, s) not in sandals]
                 pairs = sandals + others
-            non_sneakers = [(it, s) for it, s in pairs if all(k not in (f"{it.get('name','')} {it.get('description','')}").lower() for k in ["sneaker", "nike", "adidas"])]
-            if non_sneakers:
-                pairs = non_sneakers
+            # Demote athletic sneakers if sandals/slides are available
+            if sandals:
+                non_sneakers = [(it, s) for it, s in pairs if all(k not in (f"{it.get('name','')} {it.get('description','')}").lower() for k in ["sneaker", "nike", "adidas", "athletic", "running", "trainer"])]
+                if non_sneakers:
+                    pairs = non_sneakers
             cat_best["footwear"] = pairs[:5]
 
     # Hiking: if cool/cold mentioned, avoid shorts; always prefer boots

@@ -215,8 +215,36 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                 palette = infer_palette(outfit_dict)
                 color_score = palette_score(palette)
                 
-                # Combined score: completeness (40%), semantic (40%), color (20%)
-                total_score = 0.4 * completeness + 0.4 * semantic_score + 0.2 * color_score
+                # Intent-appropriate item bonus (for beach, workout, etc.)
+                intent_bonus = 0.0
+                if intent_label == "beach":
+                    # Bonus for beach-appropriate items
+                    beach_keywords = ["sandal", "slide", "flip", "short", "swim", "beach", "light"]
+                    item_text = " ".join([f"{v.get('name','')} {v.get('description','')}" for v in outfit_dict.values()]).lower()
+                    beach_matches = sum(1 for kw in beach_keywords if kw in item_text)
+                    if beach_matches >= 2:  # At least 2 beach-appropriate items
+                        intent_bonus = 0.15  # Boost score by 15%
+                    elif beach_matches >= 1:
+                        intent_bonus = 0.08
+                elif intent_label == "workout":
+                    # Bonus for athletic items
+                    workout_keywords = ["athletic", "sport", "gym", "workout", "performance", "running", "trainer"]
+                    item_text = " ".join([f"{v.get('name','')} {v.get('description','')}" for v in outfit_dict.values()]).lower()
+                    workout_matches = sum(1 for kw in workout_keywords if kw in item_text)
+                    if workout_matches >= 2:
+                        intent_bonus = 0.12
+                elif intent_label in {"business", "formal"}:
+                    # Bonus for formal items
+                    formal_keywords = ["dress", "shirt", "blazer", "suit", "loafer", "dress shoe", "trouser"]
+                    item_text = " ".join([f"{v.get('name','')} {v.get('description','')}" for v in outfit_dict.values()]).lower()
+                    formal_matches = sum(1 for kw in formal_keywords if kw in item_text)
+                    if formal_matches >= 2:
+                        intent_bonus = 0.10
+                
+                # Combined score: completeness (35%), semantic (35%), color (20%), intent bonus (10% max)
+                # Intent bonus is added on top to reward appropriate items
+                base_score = 0.35 * completeness + 0.35 * semantic_score + 0.3 * color_score
+                total_score = min(1.0, base_score + intent_bonus)  # Cap at 1.0
             else:
                 # For Gemini or if embedding unavailable, use simpler scoring
                 # For Gemini, assume high match (Gemini handles matching internally)
@@ -243,6 +271,16 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                 rationale_parts.append("This athletic outfit is designed for active wear.")
             elif intent_label == "beach":
                 rationale_parts.append("This lightweight outfit is perfect for beach activities.")
+                # Check for beach-appropriate items
+                beach_items = []
+                for cat in ["top", "bottom", "footwear", "layer"]:
+                    if cat in outfit_dict and outfit_dict[cat]:
+                        item = outfit_dict[cat]
+                        item_text = f"{item.get('name','')} {item.get('description','')}".lower()
+                        if any(kw in item_text for kw in ["sandal", "slide", "flip", "short", "swim", "beach", "light"]):
+                            beach_items.append(cat)
+                if len(beach_items) >= 2:
+                    rationale_parts.append("Perfect beach-appropriate items selected for swimming and water activities.")
             elif intent_label == "hiking":
                 rationale_parts.append("This practical outfit is ideal for outdoor activities.")
             

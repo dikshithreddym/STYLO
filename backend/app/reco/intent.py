@@ -37,6 +37,8 @@ SEEDS = {
     "beach": [
         "hot weather, shorts, light shirt, sandals or slides",
         "seaside day, airy outfit, sun protection",
+        "swimming, beach day, water activities, sandals",
+        "going to swim, pool or ocean, lightweight clothing",
     ],
     "hiking": [
         "outdoor trail, sturdy shoes, breathable layers",
