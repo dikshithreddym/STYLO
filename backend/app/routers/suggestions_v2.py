@@ -186,7 +186,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                 # Calculate cosine similarity
                 from ..reco.selector import _cosine as cosine_sim
                 sims = [max(0.0, cosine_sim(qv, v)) for v in ivecs]
-                semantic_score = float(np.mean(sims)) if sims else 0.5
+                semantic_score = float(sum(sims) / len(sims)) if sims else 0.5
             else:
                 semantic_score = 0.5
             
