@@ -168,7 +168,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
             cached_emb = None
 
     # Score and generate rationale for each outfit
-    def score_outfit(outfit_dict: dict, query: str, intent_label: str, qv=None, emb=None) -> tuple[float, str]:
+    def score_outfit(outfit_dict: dict, query: str, intent_label: str, qv=None, emb=None, gemini_used=False) -> tuple[float, str]:
         """
         Score outfit match (0-100%) and generate rationale.
         
@@ -178,6 +178,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
             intent_label: Detected intent (business, casual, etc.)
             qv: Cached query vector (to avoid re-encoding)
             emb: Cached embedder instance
+            gemini_used: Whether Gemini was used for outfit generation
         
         Returns:
             (score: float 0-100, rationale: str)
@@ -188,7 +189,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         completeness = len(present_cats) / len(required_cats)  # 0-1.0
         
         # Calculate semantic match score (if using semantic engine)
-        if not used_gemini and qv is not None and emb is not None:
+        if not gemini_used and qv is not None and emb is not None:
             # For semantic engine, use cached embedding similarity
             from ..reco.color_matcher import infer_palette, palette_score
             
@@ -216,7 +217,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         else:
             # For Gemini or if embedding unavailable, use simpler scoring
             # For Gemini, assume high match (Gemini handles matching internally)
-            total_score = 0.95 * completeness + 0.05 if used_gemini else 0.8 * completeness + 0.2
+            total_score = 0.95 * completeness + 0.05 if gemini_used else 0.8 * completeness + 0.2
         
         # Generate rationale
         rationale_parts = []
@@ -275,22 +276,43 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     
     v2_outfits: List[V2Outfit] = []
     for o in outfits_raw:
-        # Pass cached query vector and embedder to avoid re-encoding for each outfit
-        score, rationale = score_outfit(o, text, intent.label, cached_qv, cached_emb)
-        v2_outfits.append(
-            V2Outfit(
-                top=to_v2item(o["top"]) if "top" in o else None,
-                bottom=to_v2item(o["bottom"]) if "bottom" in o else None,
-                footwear=to_v2item(o["footwear"]) if "footwear" in o else None,
-                outerwear=to_v2item(o["layer"]) if "layer" in o else None,
-                accessories=to_v2item(o["accessories"]) if "accessories" in o else None,
-                score=score,
-                rationale=rationale,
+        try:
+            # Pass cached query vector and embedder to avoid re-encoding for each outfit
+            score, rationale = score_outfit(o, text, intent.label, cached_qv, cached_emb, used_gemini)
+            v2_outfits.append(
+                V2Outfit(
+                    top=to_v2item(o["top"]) if "top" in o and o["top"] else None,
+                    bottom=to_v2item(o["bottom"]) if "bottom" in o and o["bottom"] else None,
+                    footwear=to_v2item(o["footwear"]) if "footwear" in o and o["footwear"] else None,
+                    outerwear=to_v2item(o["layer"]) if "layer" in o and o["layer"] else None,
+                    accessories=to_v2item(o["accessories"]) if "accessories" in o and o["accessories"] else None,
+                    score=score,
+                    rationale=rationale,
+                )
             )
-        )
+        except Exception as e:
+            # Log error but continue with other outfits
+            print(f"Error scoring outfit: {e}")
+            # Add outfit with default score if scoring fails
+            try:
+                v2_outfits.append(
+                    V2Outfit(
+                        top=to_v2item(o["top"]) if "top" in o and o["top"] else None,
+                        bottom=to_v2item(o["bottom"]) if "bottom" in o and o["bottom"] else None,
+                        footwear=to_v2item(o["footwear"]) if "footwear" in o and o["footwear"] else None,
+                        outerwear=to_v2item(o["layer"]) if "layer" in o and o["layer"] else None,
+                        accessories=to_v2item(o["accessories"]) if "accessories" in o and o["accessories"] else None,
+                        score=50.0,  # Default score if scoring fails
+                        rationale="Outfit selected from your wardrobe.",
+                    )
+                )
+            except Exception as e2:
+                print(f"Error creating outfit: {e2}")
+                continue  # Skip this outfit if we can't create it
     
     # Sort by score (highest first) and limit to 3
-    v2_outfits.sort(key=lambda x: x.score, reverse=True)
-    v2_outfits = v2_outfits[:3]
+    if v2_outfits:
+        v2_outfits.sort(key=lambda x: x.score, reverse=True)
+        v2_outfits = v2_outfits[:3]
 
     return V2SuggestResponse(intent=intent.label, outfits=v2_outfits)
