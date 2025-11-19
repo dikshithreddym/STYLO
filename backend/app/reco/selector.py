@@ -319,7 +319,7 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
         sims = [max(0.0, _cosine(qv, v)) for v in ivecs]
         sem = float(np.mean(sims)) if sims else 0.5  # Average semantic similarity (0-1)
         # TUNE THIS LINE: Adjust color vs semantic weights to change outfit selection priority
-        total = 0.4 * cscore + 0.6 * sem + _bias_for(label)
+        total = 0.6 * cscore + 0.4 * sem + _bias_for(label)
         scored_outfits.append((o, total))
 
     scored_outfits.sort(key=lambda x: x[1], reverse=True)
