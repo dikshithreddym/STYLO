@@ -189,83 +189,98 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         completeness = len(present_cats) / len(required_cats)  # 0-1.0
         
         # Calculate semantic match score (if using semantic engine)
-        if not gemini_used and qv is not None and emb is not None:
-            # For semantic engine, use cached embedding similarity
-            from ..reco.color_matcher import infer_palette, palette_score
-            
-            item_texts = [
-                f"{outfit_dict.get(cat, {}).get('name', '')} {outfit_dict.get(cat, {}).get('description', '')}".strip()
-                for cat in ["top", "bottom", "footwear", "layer", "accessories"]
-                if cat in outfit_dict and outfit_dict[cat]
-            ]
-            
-            if item_texts:
-                ivecs = emb.encode(item_texts)
-                # Calculate cosine similarity
-                from ..reco.selector import _cosine as cosine_sim
-                sims = [max(0.0, cosine_sim(qv, v)) for v in ivecs]
-                semantic_score = float(sum(sims) / len(sims)) if sims else 0.5
+        try:
+            if not gemini_used and qv is not None and emb is not None:
+                # For semantic engine, use cached embedding similarity
+                from ..reco.color_matcher import infer_palette, palette_score
+                
+                item_texts = []
+                for cat in ["top", "bottom", "footwear", "layer", "accessories"]:
+                    if cat in outfit_dict and outfit_dict[cat]:
+                        item = outfit_dict[cat]
+                        name = item.get('name') or ''
+                        desc = item.get('description') or ''
+                        item_texts.append(f"{name} {desc}".strip())
+                
+                if item_texts:
+                    ivecs = emb.encode(item_texts)
+                    # Calculate cosine similarity
+                    from ..reco.selector import _cosine as cosine_sim
+                    sims = [max(0.0, cosine_sim(qv, v)) for v in ivecs]
+                    semantic_score = float(sum(sims) / len(sims)) if sims else 0.5
+                else:
+                    semantic_score = 0.5
+                
+                # Color harmony score
+                palette = infer_palette(outfit_dict)
+                color_score = palette_score(palette)
+                
+                # Combined score: completeness (40%), semantic (40%), color (20%)
+                total_score = 0.4 * completeness + 0.4 * semantic_score + 0.2 * color_score
             else:
-                semantic_score = 0.5
-            
-            # Color harmony score
-            palette = infer_palette(outfit_dict)
-            color_score = palette_score(palette)
-            
-            # Combined score: completeness (40%), semantic (40%), color (20%)
-            total_score = 0.4 * completeness + 0.4 * semantic_score + 0.2 * color_score
-        else:
-            # For Gemini or if embedding unavailable, use simpler scoring
-            # For Gemini, assume high match (Gemini handles matching internally)
-            total_score = 0.95 * completeness + 0.05 if gemini_used else 0.8 * completeness + 0.2
+                # For Gemini or if embedding unavailable, use simpler scoring
+                # For Gemini, assume high match (Gemini handles matching internally)
+                total_score = 0.95 * completeness + 0.05 if gemini_used else 0.8 * completeness + 0.2
+        except Exception as e:
+            # If scoring fails, use simple completeness-based score
+            print(f"Error in scoring calculation: {e}")
+            total_score = 0.8 * completeness + 0.2  # Simple fallback score
         
         # Generate rationale
         rationale_parts = []
         
-        # Occasion/intent reasoning
-        if intent_label == "business":
-            rationale_parts.append(f"This professional outfit is perfect for business settings.")
-        elif intent_label == "formal":
-            rationale_parts.append(f"This sophisticated ensemble is ideal for formal occasions.")
-        elif intent_label == "party":
-            rationale_parts.append(f"This stylish combination works great for social gatherings.")
-        elif intent_label == "casual":
-            rationale_parts.append(f"This relaxed outfit is perfect for casual occasions.")
-        elif intent_label == "workout":
-            rationale_parts.append(f"This athletic outfit is designed for active wear.")
-        elif intent_label == "beach":
-            rationale_parts.append(f"This lightweight outfit is perfect for beach activities.")
-        elif intent_label == "hiking":
-            rationale_parts.append(f"This practical outfit is ideal for outdoor activities.")
-        
-        # Item selection reasoning
-        items_mentioned = []
-        if "top" in outfit_dict and outfit_dict["top"]:
-            top_name = outfit_dict["top"].get("name", "top")
-            items_mentioned.append(top_name)
-        if "bottom" in outfit_dict and outfit_dict["bottom"]:
-            bottom_name = outfit_dict["bottom"].get("name", "bottom")
-            items_mentioned.append(bottom_name)
-        if "footwear" in outfit_dict and outfit_dict["footwear"]:
-            shoe_name = outfit_dict["footwear"].get("name", "footwear")
-            items_mentioned.append(shoe_name)
-        
-        if items_mentioned:
-            rationale_parts.append(f"Selected {', '.join(items_mentioned[:3])} based on your query.")
-        
-        # Completeness note
-        if completeness < 1.0:
-            missing = required_cats - present_cats
-            if missing:
-                rationale_parts.append(f"Note: Missing {', '.join(missing)} from your wardrobe.")
-        
-        # Match confidence
-        if total_score >= 0.9:
-            rationale_parts.append("This is an excellent match for your request!")
-        elif total_score >= 0.7:
-            rationale_parts.append("This outfit works well for your needs.")
-        else:
-            rationale_parts.append("This is the best available match from your wardrobe.")
+        try:
+            # Occasion/intent reasoning
+            if intent_label == "business":
+                rationale_parts.append("This professional outfit is perfect for business settings.")
+            elif intent_label == "formal":
+                rationale_parts.append("This sophisticated ensemble is ideal for formal occasions.")
+            elif intent_label == "party":
+                rationale_parts.append("This stylish combination works great for social gatherings.")
+            elif intent_label == "casual":
+                rationale_parts.append("This relaxed outfit is perfect for casual occasions.")
+            elif intent_label == "workout":
+                rationale_parts.append("This athletic outfit is designed for active wear.")
+            elif intent_label == "beach":
+                rationale_parts.append("This lightweight outfit is perfect for beach activities.")
+            elif intent_label == "hiking":
+                rationale_parts.append("This practical outfit is ideal for outdoor activities.")
+            
+            # Item selection reasoning
+            items_mentioned = []
+            try:
+                if "top" in outfit_dict and outfit_dict["top"]:
+                    top_name = outfit_dict["top"].get("name") or "top"
+                    items_mentioned.append(top_name)
+                if "bottom" in outfit_dict and outfit_dict["bottom"]:
+                    bottom_name = outfit_dict["bottom"].get("name") or "bottom"
+                    items_mentioned.append(bottom_name)
+                if "footwear" in outfit_dict and outfit_dict["footwear"]:
+                    shoe_name = outfit_dict["footwear"].get("name") or "footwear"
+                    items_mentioned.append(shoe_name)
+            except Exception:
+                pass  # Skip item names if there's an error
+            
+            if items_mentioned:
+                rationale_parts.append(f"Selected {', '.join(items_mentioned[:3])} based on your query.")
+            
+            # Completeness note
+            if completeness < 1.0:
+                missing = required_cats - present_cats
+                if missing:
+                    rationale_parts.append(f"Note: Missing {', '.join(missing)} from your wardrobe.")
+            
+            # Match confidence
+            if total_score >= 0.9:
+                rationale_parts.append("This is an excellent match for your request!")
+            elif total_score >= 0.7:
+                rationale_parts.append("This outfit works well for your needs.")
+            else:
+                rationale_parts.append("This is the best available match from your wardrobe.")
+        except Exception as e:
+            # If rationale generation fails, use basic message
+            print(f"Error generating rationale: {e}")
+            rationale_parts = [f"This outfit was selected for a {intent_label} occasion."]
         
         rationale = " ".join(rationale_parts) if rationale_parts else "Selected outfit based on your request."
         
