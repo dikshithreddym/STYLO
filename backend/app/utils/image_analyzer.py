@@ -39,8 +39,8 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
             logger.error("Failed to extract base64 data from image")
             return None
 
-        # Call Google Gemini Vision API (use gemini-2.5-flash)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_api_key}"
+        # Call Google Gemini Vision API (use gemini-2.0-flash-lite for consistency)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={gemini_api_key}"
 
         headers = {
             "Content-Type": "application/json"

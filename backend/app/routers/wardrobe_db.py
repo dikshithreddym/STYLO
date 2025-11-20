@@ -17,7 +17,6 @@ import requests, base64, re
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
-from app.data.wardrobe_data import DUMMY_WARDROBE_ITEMS
 
 router = APIRouter()
 

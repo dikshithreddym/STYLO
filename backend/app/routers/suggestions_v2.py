@@ -11,7 +11,9 @@ from ..database import get_db
 from ..database import WardrobeItem
 from ..reco.intent import classify_intent_zero_shot
 from ..reco.selector import assemble_outfits
+from ..reco.retriever import retrieve_relevant_items
 from ..utils.gemini_suggest import suggest_outfit_with_gemini
+from ..config import settings
 
 
 router = APIRouter(prefix="/v2", tags=["suggestions-v2"])
@@ -40,6 +42,19 @@ class V2Outfit(BaseModel):
     rationale: Optional[str] = None  # Reason why this outfit was selected
 
 
+# Helper to convert dict to V2Item
+def to_v2item(item: dict) -> Optional[V2Item]:
+    if not item:
+        return None
+    return V2Item(
+        id=item.get("id"),
+        name=item.get("name", ""),
+        category=item.get("category", ""),
+        color=item.get("color"),
+        image_url=item.get("image_url"),
+    )
+
+
 class V2SuggestResponse(BaseModel):
     intent: str
     outfits: List[V2Outfit]
@@ -62,8 +77,24 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
 
-    # 1) Load wardrobe
-    items = db.query(WardrobeItem).all()
+    # 1) Load wardrobe (with RAG filtering if enabled)
+    if settings.RAG_ENABLED:
+        try:
+            items = retrieve_relevant_items(
+                query=text,
+                db=db,
+                limit_per_category=settings.RAG_ITEMS_PER_CATEGORY,
+                min_items_per_category=settings.RAG_MIN_ITEMS_PER_CATEGORY,
+                min_total_items=settings.RAG_MIN_ITEMS_FALLBACK,
+                use_intent_boost=True
+            )
+        except Exception as e:
+            # Fallback to full wardrobe on retrieval error
+            print(f"RAG retrieval failed, using full wardrobe: {e}")
+            items = db.query(WardrobeItem).all()
+    else:
+        items = db.query(WardrobeItem).all()
+    
     wardrobe = [_model_to_dict(it) for it in items]
     if not wardrobe:
         return V2SuggestResponse(intent="none", outfits=[])
@@ -78,6 +109,8 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                 outfits_raw = gemini_result.get("outfits", [])
                 v2_outfits = []
                 for o in outfits_raw:
+                    # Extract rationale from the outfit dict (set by Gemini)
+                    rationale = o.get("rationale", "This outfit was selected based on your request and wardrobe items.")
                     v2_outfits.append(
                         V2Outfit(
                             top=to_v2item(o.get("top")) if o.get("top") else None,
@@ -86,7 +119,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                             outerwear=to_v2item(o.get("layer")) if o.get("layer") else None,
                             accessories=to_v2item(o.get("accessories")) if o.get("accessories") else None,
                             score=100.0,
-                            rationale="Gemini AI generated outfit",
+                            rationale=rationale,  # Use the actual rationale from Gemini
                         )
                     )
                 if v2_outfits:

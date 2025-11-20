@@ -43,22 +43,21 @@ def _bias_for(label: str) -> float:
     }
     return BIAS.get(label, 0.02)
 
+"""
+Intent-aware preferences to nudge selection toward sensible items
 
-# Intent-aware preferences to nudge selection toward sensible items
-#
-# HOW IT AFFECTS OUTFIT SUGGESTIONS:
-# - "prefer" list: Items matching these keywords get +0.12 to +0.18 score bonus
-# - "avoid" list: Items matching these keywords get -0.15 to -0.35 score penalty
-# - This ensures business/formal outfits don't include t-shirts/shorts, etc.
-#
-# TUNING RECOMMENDATIONS:
-# - Add new item types to "prefer" if certain items should be prioritized for an intent
-# - Add keywords to "avoid" to exclude inappropriate items (e.g., "short" for formal)
-# - Use lowercase keywords that match item names/descriptions (substring matching)
-#
-# Example: To prioritize "henley" shirts for casual occasions:
-#   "casual": {"top": {"prefer": ["t-shirt", "polo", "sweater", "henley"], ...}}
-#
+ HOW IT AFFECTS OUTFIT SUGGESTIONS:
+ - "prefer" list: Items matching these keywords get +0.12 to +0.18 score bonus
+ - "avoid" list: Items matching these keywords get -0.15 to -0.35 score penalty
+ - This ensures business/formal outfits don't include t-shirts/shorts, etc.
+
+ TUNING RECOMMENDATIONS:
+ - Add new item types to "prefer" if certain items should be prioritized for an intent
+ - Add keywords to "avoid" to exclude inappropriate items (e.g., "short" for formal)
+ - Use lowercase keywords that match item names/descriptions (substring matching)
+Example: To prioritize "henley" shirts for casual occasions:
+   "casual": {"top": {"prefer": ["t-shirt", "polo", "sweater", "henley"], ...}}
+"""
 INTENT_RULES: Dict[str, Dict[str, Dict[str, List[str]]]] = {
     "business": {
         "top": {"prefer": ["shirt", "button-down", "shirt", "polo"], "avoid": ["t-shirt", "hoodie", "tee"]},

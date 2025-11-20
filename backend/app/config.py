@@ -31,6 +31,13 @@ class Settings:
     # Feature flags
     USE_CLOUDINARY: bool = os.getenv("USE_CLOUDINARY", "true").lower() == "true"
     
+    # RAG (Retrieval-Augmented Generation) Configuration
+    RAG_ENABLED: bool = os.getenv("RAG_ENABLED", "true").lower() == "true"
+    # Lowered to improve fallback for small wardrobes
+    RAG_ITEMS_PER_CATEGORY: int = int(os.getenv("RAG_ITEMS_PER_CATEGORY", "10"))
+    RAG_MIN_ITEMS_FALLBACK: int = int(os.getenv("RAG_MIN_ITEMS_FALLBACK", "5"))
+    RAG_MIN_ITEMS_PER_CATEGORY: int = int(os.getenv("RAG_MIN_ITEMS_PER_CATEGORY", "1"))
+    
     """Check if Cloudinary is properly configured"""
     @property
     def cloudinary_configured(self) -> bool:
