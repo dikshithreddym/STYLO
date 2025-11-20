@@ -62,310 +62,63 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
 
-    # 1) Zero-shot classify intent (robust to model errors)
-    try:
-        intent = classify_intent_zero_shot(text)
-    except Exception:
-        intent = type("_I", (), {"label": "casual"})()  # simple stub
-
-    # 2) Load wardrobe
+    # 1) Load wardrobe
     items = db.query(WardrobeItem).all()
     wardrobe = [_model_to_dict(it) for it in items]
     if not wardrobe:
-        return V2SuggestResponse(intent=intent.label, outfits=[])
+        return V2SuggestResponse(intent="none", outfits=[])
 
-    # 3) PRIORITY: Try Gemini API first if GEMINI_API_KEY is configured
-    outfits_raw = None
+    # 2) Try Gemini API first
     gemini_api_key = os.getenv("GEMINI_API_KEY")
-    used_gemini = False
-    
     if gemini_api_key:
         try:
-            outfits_raw = await suggest_outfit_with_gemini(text, wardrobe, limit=3)
-            if outfits_raw:
-                used_gemini = True
+            gemini_result = await suggest_outfit_with_gemini(text, wardrobe, limit=3)
+            if gemini_result:
+                intent = gemini_result.get("intent", "none")
+                outfits_raw = gemini_result.get("outfits", [])
+                v2_outfits = []
+                for o in outfits_raw:
+                    v2_outfits.append(
+                        V2Outfit(
+                            top=to_v2item(o.get("top")) if o.get("top") else None,
+                            bottom=to_v2item(o.get("bottom")) if o.get("bottom") else None,
+                            footwear=to_v2item(o.get("footwear")) if o.get("footwear") else None,
+                            outerwear=to_v2item(o.get("layer")) if o.get("layer") else None,
+                            accessories=to_v2item(o.get("accessories")) if o.get("accessories") else None,
+                            score=100.0,
+                            rationale="Gemini AI generated outfit",
+                        )
+                    )
+                if v2_outfits:
+                    return V2SuggestResponse(intent=intent, outfits=v2_outfits)
         except Exception as e:
             print(f"Gemini suggestion failed, falling back to semantic engine: {e}")
-            outfits_raw = None
-    
-    # 4) Fallback to semantic embedding-based engine if Gemini not available/failed
-    if not outfits_raw:
-        try:
-            # Limit to 3 variations
-            outfits_raw = assemble_outfits(text, wardrobe, label=intent.label, k=3)
-        except Exception:
-            outfits_raw = []
 
-    # Fallback: if semantic assembly couldn't form an outfit, build a simple one
-    if not outfits_raw:
-        by_cat: dict[str, list[dict]] = {}
-        for it in wardrobe:
-            cat = (it.get("category") or "").lower()
-            if not cat:
-                continue
-            by_cat.setdefault(cat, []).append(it)
-
-        def pick_any(candidates: list[dict], *type_hints: str) -> dict | None:
-            if not candidates:
-                return None
-            if type_hints:
-                text_hints = [h.lower() for h in type_hints]
-                for it in candidates:
-                    t = (it.get("name") or "") + " " + (it.get("description") or "")
-                    tl = t.lower()
-                    if any(h in tl for h in text_hints):
-                        return it
-            return candidates[0]
-
-        top = pick_any(by_cat.get("top", []), "shirt", "t-shirt", "polo", "blouse", "sweater")
-        bottom = pick_any(by_cat.get("bottom", []), "jeans", "pants", "chinos", "skirt", "shorts")
-        shoes_pool = by_cat.get("footwear", []) or by_cat.get("shoes", [])
-        footwear = pick_any(shoes_pool, "sneaker", "boot", "loafer", "shoe", "sandal")
-        layer = pick_any(by_cat.get("layer", []), "jacket", "blazer", "hoodie", "sweater", "cardigan")
-        accessories = pick_any(by_cat.get("accessories", []))
-
-        fallback: dict[str, dict] = {}
-        if top:
-            fallback["top"] = top
-        if bottom:
-            fallback["bottom"] = bottom
-        if footwear:
-            fallback["footwear"] = footwear
-        if layer:
-            fallback["layer"] = layer
-        if accessories:
-            fallback["accessories"] = accessories
-
-        required_present = len({k for k in fallback.keys()} & {"top", "bottom", "footwear"})
-        if required_present >= 2:
-            outfits_raw = [fallback]
-        else:
-            # As last resort, return best-available outfit (e.g., only a layer)
-            if fallback:
-                outfits_raw = [fallback]
-
-    def to_v2item(d: dict) -> V2Item:
-        return V2Item(
-            id=d.get("id"),
-            name=d.get("name") or "",
-            category=d.get("category") or "",
-            color=d.get("color"),
-            image_url=d.get("image_url"),
-        )
-
-    # OPTIMIZATION: Cache embedding resources outside the scoring loop
-    # This prevents re-encoding the query vector for every outfit (expensive operation)
-    cached_qv = None
-    cached_emb = None
-    if not used_gemini:
-        try:
-            from ..reco.embedding import Embedder
-            cached_emb = Embedder.instance()
-            cached_qv = cached_emb.encode([text])[0]
-        except Exception:
-            # If embedding fails, skip semantic scoring
-            cached_qv = None
-            cached_emb = None
-
-    # Score and generate rationale for each outfit
-    def score_outfit(outfit_dict: dict, query: str, intent_label: str, qv=None, emb=None, gemini_used=False) -> tuple[float, str]:
-        """
-        Score outfit match (0-100%) and generate rationale.
-        
-        Args:
-            outfit_dict: Outfit dictionary with category -> item mapping
-            query: User's query text
-            intent_label: Detected intent (business, casual, etc.)
-            qv: Cached query vector (to avoid re-encoding)
-            emb: Cached embedder instance
-            gemini_used: Whether Gemini was used for outfit generation
-        
-        Returns:
-            (score: float 0-100, rationale: str)
-        """
-        # Calculate completeness score
-        required_cats = {"top", "bottom", "footwear"}
-        present_cats = {cat for cat in required_cats if cat in outfit_dict and outfit_dict[cat]}
-        completeness = len(present_cats) / len(required_cats)  # 0-1.0
-        
-        # Calculate semantic match score (if using semantic engine)
-        try:
-            if not gemini_used and qv is not None and emb is not None:
-                # For semantic engine, use cached embedding similarity
-                from ..reco.color_matcher import infer_palette, palette_score
-                
-                item_texts = []
-                for cat in ["top", "bottom", "footwear", "layer", "accessories"]:
-                    if cat in outfit_dict and outfit_dict[cat]:
-                        item = outfit_dict[cat]
-                        name = item.get('name') or ''
-                        desc = item.get('description') or ''
-                        item_texts.append(f"{name} {desc}".strip())
-                
-                if item_texts:
-                    ivecs = emb.encode(item_texts)
-                    # Calculate cosine similarity
-                    from ..reco.selector import _cosine as cosine_sim
-                    sims = [max(0.0, cosine_sim(qv, v)) for v in ivecs]
-                    semantic_score = float(sum(sims) / len(sims)) if sims else 0.5
-                else:
-                    semantic_score = 0.5
-                
-                # Color harmony score
-                palette = infer_palette(outfit_dict)
-                color_score = palette_score(palette)
-                
-                # Intent-appropriate item bonus (for beach, workout, etc.)
-                intent_bonus = 0.0
-                if intent_label == "beach":
-                    # Bonus for beach-appropriate items
-                    beach_keywords = ["sandal", "slide", "flip", "short", "swim", "beach", "light"]
-                    item_text = " ".join([f"{v.get('name','')} {v.get('description','')}" for v in outfit_dict.values()]).lower()
-                    beach_matches = sum(1 for kw in beach_keywords if kw in item_text)
-                    if beach_matches >= 2:  # At least 2 beach-appropriate items
-                        intent_bonus = 0.15  # Boost score by 15%
-                    elif beach_matches >= 1:
-                        intent_bonus = 0.08
-                elif intent_label == "workout":
-                    # Bonus for athletic items
-                    workout_keywords = ["athletic", "sport", "gym", "workout", "performance", "running", "trainer"]
-                    item_text = " ".join([f"{v.get('name','')} {v.get('description','')}" for v in outfit_dict.values()]).lower()
-                    workout_matches = sum(1 for kw in workout_keywords if kw in item_text)
-                    if workout_matches >= 2:
-                        intent_bonus = 0.12
-                elif intent_label in {"business", "formal"}:
-                    # Bonus for formal items
-                    formal_keywords = ["dress", "shirt", "blazer", "suit", "loafer", "dress shoe", "trouser"]
-                    item_text = " ".join([f"{v.get('name','')} {v.get('description','')}" for v in outfit_dict.values()]).lower()
-                    formal_matches = sum(1 for kw in formal_keywords if kw in item_text)
-                    if formal_matches >= 2:
-                        intent_bonus = 0.10
-                
-                # Combined score: completeness (35%), semantic (35%), color (20%), intent bonus (10% max)
-                # Intent bonus is added on top to reward appropriate items
-                base_score = 0.35 * completeness + 0.35 * semantic_score + 0.3 * color_score
-                total_score = min(1.0, base_score + intent_bonus)  # Cap at 1.0
-            else:
-                # For Gemini or if embedding unavailable, use simpler scoring
-                # For Gemini, assume high match (Gemini handles matching internally)
-                total_score = 0.95 * completeness + 0.05 if gemini_used else 0.8 * completeness + 0.2
-        except Exception as e:
-            # If scoring fails, use simple completeness-based score
-            print(f"Error in scoring calculation: {e}")
-            total_score = 0.8 * completeness + 0.2  # Simple fallback score
-        
-        # Generate rationale
-        rationale_parts = []
-        
-        try:
-            # Occasion/intent reasoning
-            if intent_label == "business":
-                rationale_parts.append("This professional outfit is perfect for business settings.")
-            elif intent_label == "formal":
-                rationale_parts.append("This sophisticated ensemble is ideal for formal occasions.")
-            elif intent_label == "party":
-                rationale_parts.append("This stylish combination works great for social gatherings.")
-            elif intent_label == "casual":
-                rationale_parts.append("This relaxed outfit is perfect for casual occasions.")
-            elif intent_label == "workout":
-                rationale_parts.append("This athletic outfit is designed for active wear.")
-            elif intent_label == "beach":
-                rationale_parts.append("This lightweight outfit is perfect for beach activities.")
-                # Check for beach-appropriate items
-                beach_items = []
-                for cat in ["top", "bottom", "footwear", "layer"]:
-                    if cat in outfit_dict and outfit_dict[cat]:
-                        item = outfit_dict[cat]
-                        item_text = f"{item.get('name','')} {item.get('description','')}".lower()
-                        if any(kw in item_text for kw in ["sandal", "slide", "flip", "short", "swim", "beach", "light"]):
-                            beach_items.append(cat)
-                if len(beach_items) >= 2:
-                    rationale_parts.append("Perfect beach-appropriate items selected for swimming and water activities.")
-            elif intent_label == "hiking":
-                rationale_parts.append("This practical outfit is ideal for outdoor activities.")
-            
-            # Item selection reasoning
-            items_mentioned = []
-            try:
-                if "top" in outfit_dict and outfit_dict["top"]:
-                    top_name = outfit_dict["top"].get("name") or "top"
-                    items_mentioned.append(top_name)
-                if "bottom" in outfit_dict and outfit_dict["bottom"]:
-                    bottom_name = outfit_dict["bottom"].get("name") or "bottom"
-                    items_mentioned.append(bottom_name)
-                if "footwear" in outfit_dict and outfit_dict["footwear"]:
-                    shoe_name = outfit_dict["footwear"].get("name") or "footwear"
-                    items_mentioned.append(shoe_name)
-            except Exception:
-                pass  # Skip item names if there's an error
-            
-            if items_mentioned:
-                rationale_parts.append(f"Selected {', '.join(items_mentioned[:3])} based on your query.")
-            
-            # Completeness note
-            if completeness < 1.0:
-                missing = required_cats - present_cats
-                if missing:
-                    rationale_parts.append(f"Note: Missing {', '.join(missing)} from your wardrobe.")
-            
-            # Match confidence
-            if total_score >= 0.9:
-                rationale_parts.append("This is an excellent match for your request!")
-            elif total_score >= 0.7:
-                rationale_parts.append("This outfit works well for your needs.")
-            else:
-                rationale_parts.append("This is the best available match from your wardrobe.")
-        except Exception as e:
-            # If rationale generation fails, use basic message
-            print(f"Error generating rationale: {e}")
-            rationale_parts = [f"This outfit was selected for a {intent_label} occasion."]
-        
-        rationale = " ".join(rationale_parts) if rationale_parts else "Selected outfit based on your request."
-        
-        # Convert to percentage (0-100)
-        score_percentage = total_score * 100
-        
-        return score_percentage, rationale
-    
-    v2_outfits: List[V2Outfit] = []
+    # 3) Fallback to semantic embedding-based engine if Gemini not available/failed
+    from ..reco.intent import classify_intent_zero_shot
+    try:
+        intent_obj = classify_intent_zero_shot(text)
+        intent = getattr(intent_obj, "label", "none")
+    except Exception:
+        intent = "casual"
+    try:
+        from ..reco.selector import assemble_outfits
+        outfits_raw = assemble_outfits(text, wardrobe, label=intent, k=3)
+    except Exception:
+        outfits_raw = []
+    v2_outfits = []
     for o in outfits_raw:
-        try:
-            # Pass cached query vector and embedder to avoid re-encoding for each outfit
-            score, rationale = score_outfit(o, text, intent.label, cached_qv, cached_emb, used_gemini)
-            v2_outfits.append(
-                V2Outfit(
-                    top=to_v2item(o["top"]) if "top" in o and o["top"] else None,
-                    bottom=to_v2item(o["bottom"]) if "bottom" in o and o["bottom"] else None,
-                    footwear=to_v2item(o["footwear"]) if "footwear" in o and o["footwear"] else None,
-                    outerwear=to_v2item(o["layer"]) if "layer" in o and o["layer"] else None,
-                    accessories=to_v2item(o["accessories"]) if "accessories" in o and o["accessories"] else None,
-                    score=score,
-                    rationale=rationale,
-                )
+        v2_outfits.append(
+            V2Outfit(
+                top=to_v2item(o.get("top")) if o.get("top") else None,
+                bottom=to_v2item(o.get("bottom")) if o.get("bottom") else None,
+                footwear=to_v2item(o.get("footwear")) if o.get("footwear") else None,
+                outerwear=to_v2item(o.get("layer")) if o.get("layer") else None,
+                accessories=to_v2item(o.get("accessories")) if o.get("accessories") else None,
+                score=80.0,
+                rationale="Semantic engine generated outfit",
             )
-        except Exception as e:
-            # Log error but continue with other outfits
-            print(f"Error scoring outfit: {e}")
-            # Add outfit with default score if scoring fails
-            try:
-                v2_outfits.append(
-                    V2Outfit(
-                        top=to_v2item(o["top"]) if "top" in o and o["top"] else None,
-                        bottom=to_v2item(o["bottom"]) if "bottom" in o and o["bottom"] else None,
-                        footwear=to_v2item(o["footwear"]) if "footwear" in o and o["footwear"] else None,
-                        outerwear=to_v2item(o["layer"]) if "layer" in o and o["layer"] else None,
-                        accessories=to_v2item(o["accessories"]) if "accessories" in o and o["accessories"] else None,
-                        score=50.0,  # Default score if scoring fails
-                        rationale="Outfit selected from your wardrobe.",
-                    )
-                )
-            except Exception as e2:
-                print(f"Error creating outfit: {e2}")
-                continue  # Skip this outfit if we can't create it
-    
-    # Sort by score (highest first) and limit to 3
+        )
     if v2_outfits:
-        v2_outfits.sort(key=lambda x: x.score, reverse=True)
-        v2_outfits = v2_outfits[:3]
-
-    return V2SuggestResponse(intent=intent.label, outfits=v2_outfits)
+        return V2SuggestResponse(intent=intent, outfits=v2_outfits)
+    return V2SuggestResponse(intent=intent, outfits=[])

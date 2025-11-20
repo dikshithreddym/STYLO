@@ -3,17 +3,14 @@ Cloudinary image upload helper functions
 """
 import cloudinary
 import cloudinary.uploader
-import cloudinary.api
 from cloudinary import CloudinaryImage
-import base64
 import re
 from typing import Optional, Dict, Any
 from fastapi import HTTPException
 from app.config import settings
 
-
+"""Initialize Cloudinary with configuration from settings"""
 def initialize_cloudinary():
-    """Initialize Cloudinary with configuration from settings"""
     if settings.cloudinary_configured:
         cloudinary.config(
             cloud_name=settings.CLOUDINARY_CLOUD_NAME,
@@ -24,17 +21,15 @@ def initialize_cloudinary():
         return True
     return False
 
-
+"""Check if string is a base64 encoded image"""
 def is_base64_image(image_data: str) -> bool:
-    """Check if string is a base64 encoded image"""
     if not image_data:
         return False
     # Check for data URL format: data:image/...;base64,...
     return image_data.startswith('data:image/')
 
-
+"""Extract base64 data from data URL"""
 def extract_base64_data(data_url: str) -> Optional[str]:
-    """Extract base64 data from data URL"""
     if not data_url:
         return None
     
@@ -44,28 +39,24 @@ def extract_base64_data(data_url: str) -> Optional[str]:
         return match.group(1)
     return None
 
-
+"""     Upload an image to Cloudinary
+    Args:
+        image_data: Base64 data URL or regular URL
+        folder: Cloudinary folder name (default: from settings)
+        public_id: Custom public ID for the image
+        tags: List of tags to add to the image
+    Returns:
+        Dict with upload result including 'url' and 'public_id'
+    Raises:
+        HTTPException: If Cloudinary is not configured or upload fails
+"""
 async def upload_image_to_cloudinary(
     image_data: str,
     folder: Optional[str] = None,
     public_id: Optional[str] = None,
     tags: Optional[list] = None
 ) -> Dict[str, Any]:
-    """
-    Upload an image to Cloudinary
     
-    Args:
-        image_data: Base64 data URL or regular URL
-        folder: Cloudinary folder name (default: from settings)
-        public_id: Custom public ID for the image
-        tags: List of tags to add to the image
-    
-    Returns:
-        Dict with upload result including 'url' and 'public_id'
-    
-    Raises:
-        HTTPException: If Cloudinary is not configured or upload fails
-    """
     # Check if Cloudinary is enabled and configured
     if not settings.USE_CLOUDINARY:
         raise HTTPException(
@@ -144,16 +135,13 @@ async def upload_image_to_cloudinary(
         )
 
 
-async def delete_image_from_cloudinary(public_id: str) -> bool:
-    """
-    Delete an image from Cloudinary
-    
+"""    Delete an image from Cloudinary
     Args:
         public_id: The Cloudinary public ID of the image
-    
     Returns:
         bool: True if deletion was successful
-    """
+"""
+async def delete_image_from_cloudinary(public_id: str) -> bool:
     if not settings.cloudinary_configured:
         return False
     

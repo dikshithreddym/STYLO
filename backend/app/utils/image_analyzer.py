@@ -1,9 +1,9 @@
 """
 Image analysis utility using AI to generate clothing descriptions
 """
-import base64
-import requests
+import httpx
 import re
+import logging
 from typing import Optional
 from app.config import settings
 
@@ -20,34 +20,32 @@ def extract_base64_from_data_url(data_url: str) -> Optional[str]:
 async def analyze_clothing_image(image_data: str) -> Optional[str]:
     """
     Analyze a clothing image and generate a description using Google Gemini
-    
     Args:
         image_data: Base64 data URL of the image
-        
     Returns:
         str: Description of the clothing item, or None if analysis fails
     """
-    # Check if Gemini API key is configured
+    logger = logging.getLogger(__name__)
     gemini_api_key = getattr(settings, 'GEMINI_API_KEY', None)
-    
+
     if not gemini_api_key:
-        # Return None if no AI service is configured (will use fallback)
+        logger.error("GEMINI_API_KEY not set.")
         return None
-    
+
     try:
         # Extract base64 data
         base64_data = extract_base64_from_data_url(image_data)
         if not base64_data:
-            print("Failed to extract base64 data from image")
+            logger.error("Failed to extract base64 data from image")
             return None
-        
+
         # Call Google Gemini Vision API (use gemini-2.5-flash)
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_api_key}"
-        
+
         headers = {
             "Content-Type": "application/json"
         }
-        
+
         payload = {
             "contents": [{
                 "parts": [
@@ -63,29 +61,29 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
                 ]
             }]
         }
-        
-        response = requests.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            if 'candidates' in result and len(result['candidates']) > 0:
-                content = result['candidates'][0]['content']
-                if 'parts' in content and len(content['parts']) > 0:
-                    description = content['parts'][0]['text'].strip()
-                    return description
-            print(f"Unexpected Gemini API response format: {result}")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, json=payload, timeout=30)
+
+        if response.status_code != 200:
+            logger.error(f"Gemini API error: {response.status_code} - {response.text}")
             return None
-        else:
-            print(f"Gemini API error: {response.status_code} - {response.text}")
+
+        result = response.json()
+        if 'candidates' not in result or not result['candidates']:
+            logger.error("No candidates in Gemini response.")
             return None
-            
+
+        content = result['candidates'][0]['content']
+        if 'parts' not in content or not content['parts']:
+            logger.error("No parts in Gemini response content.")
+            return None
+
+        description = content['parts'][0]['text'].strip()
+        return description
+
     except Exception as e:
-        print(f"Error analyzing image: {e}")
+        logger.error(f"Error analyzing image: {e}")
         return None
 
 

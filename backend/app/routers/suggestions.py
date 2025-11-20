@@ -15,7 +15,7 @@ from app.database import get_db
 from app.database import WardrobeItem
 import os
 from sqlalchemy.exc import ProgrammingError, OperationalError
-from app.utils.intent_classifier import classify_intent
+from app.utils.gemini_suggest import suggest_outfit_with_gemini
 
 router = APIRouter()
 
@@ -952,8 +952,12 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
 
-    # New: intent classification (outfit | item_search | blended_outfit_item | activity_shoes)
-    intent, requested_item = classify_intent(text)
+    # Use Gemini API for intent classification and outfit suggestion
+    gemini_result = await suggest_outfit_with_gemini(text, get_wardrobe_items(db), limit=payload.limit)
+    if not gemini_result:
+        raise HTTPException(status_code=500, detail="Gemini API failed to classify intent or suggest outfits.")
+    intent = gemini_result.get("intent")
+    requested_item = gemini_result.get("item_type")
     
     # Check if wardrobe has items
     available_items = get_wardrobe_items(db)
@@ -965,7 +969,6 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
     
     # Handle item search only
     if intent == "item_search":
-        # Map requested_item to category and keywords
         items = get_wardrobe_items(db)
         if requested_item == "shoes":
             shoes = [it for it in items if it.get("category") == "footwear"]
@@ -981,20 +984,16 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
             )
         # fallback to legacy search
         search_result = _search_wardrobe(text, db)
-        
         if search_result["found"]:
-            # Return the found items as an "outfit"
             items = search_result["items"]
             search_desc = []
             if search_result["search_types"]:
                 search_desc.append(f"type: {', '.join(search_result['search_types'])}")
             if search_result["search_colors"]:
                 search_desc.append(f"color: {', '.join(search_result['search_colors'])}")
-            
             notes = f"Found {search_result['count']} item(s) matching your query"
             if search_desc:
                 notes += f" ({'; '.join(search_desc)})"
-            
             return SuggestResponse(
                 occasion="query",
                 colors=search_result["search_colors"],
@@ -1008,109 +1007,31 @@ async def suggest_outfit(payload: SuggestRequest, db: Session = Depends(get_db))
                 intent=intent,
             )
         else:
-            # No items found
             search_terms = []
             if search_result["search_types"]:
                 search_terms.extend(search_result["search_types"])
             if search_result["search_colors"]:
                 search_terms.extend(search_result["search_colors"])
-            
             search_desc = " ".join(search_terms) if search_terms else "your query"
             available_types = ', '.join(set(item['type'] for item in available_items))
-            
             raise HTTPException(
                 status_code=404,
                 detail=f"No items found matching '{search_desc}'. Your wardrobe contains: {available_types}."
             )
     
     # Handle outfit suggestion requests (intent: outfit or blended_outfit_item or activity_shoes promoted to outfit)
-    # Check if wardrobe has basic items needed for an outfit
-    has_top_or_dress = any(
-        item.get("category") in ["top", "one-piece"] or 
-        any(word in item["type"].lower() for word in ["shirt", "dress", "top", "sweater", "jacket"])
-        for item in available_items
-    )
-    has_bottom = any(
-        item.get("category") == "bottom" or 
-        any(word in item["type"].lower() for word in ["jeans", "pants", "chinos", "skirt"])
-        for item in available_items
-    )
-    
-    if not has_top_or_dress and not has_bottom:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Not enough clothing items to create an outfit. You have {len(available_items)} item(s): {', '.join(item['type'] for item in available_items)}. Please add tops, bottoms, or complete outfits."
-        )
-
-    tokens = _text_tokens(text)
-    colors = _preferred_colors(tokens)
-    occasion = _detect_occasion(tokens)
-    weather = _detect_weather(tokens)
-
-    # ML stub
-    if payload.strategy == 'ml':
-        url = os.environ.get('ML_SUGGEST_URL')
-        if not url:
-            raise HTTPException(status_code=501, detail="ML strategy not configured; set ML_SUGGEST_URL")
-        # In future: call ML service here
-        raise HTTPException(status_code=501, detail="ML service integration not yet implemented")
-
-    # Rules engine
-    variants = generate_alternatives(occasion, weather, colors, payload.limit, db, tokens)
-    
-    # If no valid outfits generated, provide helpful message
-    if not variants or all(len(v) == 0 for v in variants):
-        available_types = ', '.join(set(item['type'] for item in available_items))
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot create an outfit with available items. Your wardrobe contains: {available_types}. Try adding more clothing pieces like tops, bottoms, or shoes."
-        )
-    
-    scored = [
-        (v, outfit_score(v, occasion, weather, colors, tokens))
-        for v in variants if len(v) > 0
-    ]
-    
-    if not scored:
-        raise HTTPException(
-            status_code=400,
-            detail="Unable to generate outfit suggestions. Please add more clothing items to your wardrobe."
-        )
-    
-    scored.sort(key=lambda x: x[1], reverse=True)
-    best_items, best_score = scored[0]
-    
-    # Generate intelligent rationale for the best outfit
-    best_rationale = generate_outfit_rationale(best_items, occasion, weather, colors, best_score, tokens, text)
-    
-    # Generate rationales for alternatives too
-    alt_outfits = [
-        Outfit(
-            items=v, 
-            score=s, 
-            rationale=generate_outfit_rationale(v, occasion, weather, colors, s, tokens, text)
-        ) 
-        for v, s in scored[1:]
-    ]
-
-    notes_parts = [f"Occasion: {occasion}"]
-    if weather:
-        notes_parts.append(f"Weather: {weather}")
-    if colors:
-        notes_parts.append("Preferred colors: " + ", ".join(colors))
-
-    # If blended intent (e.g., outfit with shoes) append a shoes-only alternative
-    if intent == "blended_outfit_item" and requested_item == "shoes":
-        all_items = get_wardrobe_items(db)
-        shoes = [it for it in all_items if it.get("category") == "footwear"]
-        if shoes:
-            alt_outfits.append(Outfit(items=shoes, score=1.0, rationale="Related shoes from your wardrobe"))
-
+    # Use Gemini output for outfit suggestions
+    outfits = gemini_result.get("outfits", [])
+    if not outfits:
+        raise HTTPException(status_code=404, detail="No outfits could be generated by Gemini.")
+    # Convert Gemini output to SuggestResponse format
+    best_outfit = outfits[0] if outfits else []
+    alt_outfits = [Outfit(items=o.values(), score=1.0, rationale="Alternative outfit") for o in outfits[1:]]
     return SuggestResponse(
-        occasion=occasion,
-        colors=colors,
-        outfit=Outfit(items=best_items, score=best_score, rationale=best_rationale),
+        occasion=intent,
+        colors=[],
+        outfit=Outfit(items=best_outfit.values(), score=1.0, rationale="Gemini AI generated outfit"),
         alternatives=alt_outfits,
-        notes=" | ".join(notes_parts) if notes_parts else None,
+        notes=None,
         intent=intent,
     )
