@@ -7,14 +7,11 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+"""Application settings and configuration"""
 class Settings:
-    """Application settings"""
-    
+
     # Database Configuration
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL",
-        "sqlite:///./stylo.db"  # Default to SQLite for local development
-    )
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
     
     # Frontend URL (for CORS)
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
@@ -34,9 +31,9 @@ class Settings:
     # Feature flags
     USE_CLOUDINARY: bool = os.getenv("USE_CLOUDINARY", "true").lower() == "true"
     
+    """Check if Cloudinary is properly configured"""
     @property
     def cloudinary_configured(self) -> bool:
-        """Check if Cloudinary is properly configured"""
         return bool(
             self.CLOUDINARY_CLOUD_NAME 
             and self.CLOUDINARY_API_KEY 

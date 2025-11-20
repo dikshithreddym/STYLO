@@ -12,7 +12,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.schemas import WardrobeItem, SuggestRequest, SuggestResponse, Outfit
 from app.database import get_db
-from app import models
+from app.database import WardrobeItem
 import os
 from sqlalchemy.exc import ProgrammingError, OperationalError
 from app.utils.intent_classifier import classify_intent
@@ -22,7 +22,7 @@ router = APIRouter()
 # Get wardrobe items from database
 def get_wardrobe_items(db: Session) -> List[dict]:
     try:
-        items = db.query(models.WardrobeItem).all()
+        items = db.query(WardrobeItem).all()
     except (ProgrammingError, OperationalError) as exc:
         # Auto-heal missing column by running migration once, then retry
         msg = str(exc)
@@ -34,7 +34,7 @@ def get_wardrobe_items(db: Session) -> List[dict]:
             try:
                 from migrate_add_image_description import migrate  # type: ignore
                 migrate()
-                items = db.query(models.WardrobeItem).all()
+                items = db.query(WardrobeItem).all()
             except Exception:
                 # Re-raise original if healing fails
                 raise

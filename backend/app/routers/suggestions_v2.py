@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from .. import models
+from ..database import WardrobeItem
 from ..reco.intent import classify_intent_zero_shot
 from ..reco.selector import assemble_outfits
 from ..utils.gemini_suggest import suggest_outfit_with_gemini
@@ -45,7 +45,7 @@ class V2SuggestResponse(BaseModel):
     outfits: List[V2Outfit]
 
 
-def _model_to_dict(it: models.WardrobeItem) -> dict:
+def _model_to_dict(it: WardrobeItem) -> dict:
     return {
         "id": it.id,
         "name": getattr(it, "type", None) or "",
@@ -69,7 +69,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         intent = type("_I", (), {"label": "casual"})()  # simple stub
 
     # 2) Load wardrobe
-    items = db.query(models.WardrobeItem).all()
+    items = db.query(WardrobeItem).all()
     wardrobe = [_model_to_dict(it) for it in items]
     if not wardrobe:
         return V2SuggestResponse(intent=intent.label, outfits=[])

@@ -143,7 +143,7 @@ async def update_category_to_footwear():
     import asyncio
     try:
         from app.database import SessionLocal
-        from app.models import WardrobeItem
+        from app.database import WardrobeItem
 
         def update_items():
             db = SessionLocal()

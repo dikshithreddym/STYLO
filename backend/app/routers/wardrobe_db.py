@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.schemas import WardrobeItem as WardrobeItemSchema, WardrobeItemCreate
-from app.models import WardrobeItem as WardrobeItemModel
+from app.database import WardrobeItem as WardrobeItemModel
 from app.database import get_db
 from app.utils.cloudinary_helper import (
     upload_image_to_cloudinary,

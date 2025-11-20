@@ -2,7 +2,7 @@
 Simple script to verify database connection and show wardrobe items
 """
 from app.database import SessionLocal, engine
-from app.models import Base, WardrobeItem
+from app.database import Base, WardrobeItem
 
 # Create tables if they don't exist
 Base.metadata.create_all(bind=engine)

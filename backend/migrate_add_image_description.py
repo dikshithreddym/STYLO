@@ -4,7 +4,7 @@ Works on SQLite and Postgres using SQLAlchemy Inspector.
 """
 from sqlalchemy import inspect, text
 from app.database import engine, Base
-from app.models import WardrobeItem  # noqa: F401 - ensure model is registered
+from app.database import WardrobeItem  # noqa: F401 - ensure model is registered
 
 
 def migrate() -> None:

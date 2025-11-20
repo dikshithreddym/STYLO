@@ -3,7 +3,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.schemas import WardrobeItem, WardrobeItemCreate
 from app.database import get_db
-from app import models
+from app.database import WardrobeItem
 from app.utils.cloudinary_helper import (
     upload_image_to_cloudinary,
     delete_image_from_cloudinary,
@@ -37,21 +37,21 @@ async def get_wardrobe_items(
     """
     Get wardrobe items with optional filtering and sorting.
     """
-    query = db.query(models.WardrobeItem)
+    query = db.query(WardrobeItem)
 
     # Filtering
     if q:
         q_lower = f"%{q.lower()}%"
         query = query.filter(
-            (models.WardrobeItem.type.ilike(q_lower)) |
-            (models.WardrobeItem.color.ilike(q_lower))
+            (WardrobeItem.type.ilike(q_lower)) |
+            (WardrobeItem.color.ilike(q_lower))
         )
     if type:
-        query = query.filter(models.WardrobeItem.type.ilike(type))
+        query = query.filter(WardrobeItem.type.ilike(type))
     if color:
-        query = query.filter(models.WardrobeItem.color.ilike(f"%{color}%"))
+        query = query.filter(WardrobeItem.color.ilike(f"%{color}%"))
     if category:
-        query = query.filter(models.WardrobeItem.category.ilike(category))
+        query = query.filter(WardrobeItem.category.ilike(category))
 
     # Get total count before pagination
     total = query.count()
@@ -63,7 +63,7 @@ async def get_wardrobe_items(
         if key not in {"id", "type", "color", "category"}:
             raise HTTPException(status_code=400, detail="Invalid sort field")
         
-        sort_column = getattr(models.WardrobeItem, key)
+        sort_column = getattr(WardrobeItem, key)
         if reverse:
             query = query.order_by(sort_column.desc())
         else:
@@ -145,7 +145,7 @@ async def get_wardrobe_item(item_id: int, db: Session = Depends(get_db)):
     """
     Get a specific wardrobe item by ID
     """
-    item = db.query(models.WardrobeItem).filter(models.WardrobeItem.id == item_id).first()
+    item = db.query(WardrobeItem).filter(WardrobeItem.id == item_id).first()
     if item:
         return item.to_dict()
     raise HTTPException(status_code=404, detail="Item not found")
@@ -188,7 +188,7 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
                 payload.category
             )
     
-    new_item = models.WardrobeItem(
+    new_item = WardrobeItem(
         type=payload.type,
         color=payload.color,
         image_url=image_url,
@@ -209,7 +209,7 @@ async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db)):
     """
     Delete a wardrobe item by ID
     """
-    item = db.query(models.WardrobeItem).filter(models.WardrobeItem.id == item_id).first()
+    item = db.query(WardrobeItem).filter(WardrobeItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     

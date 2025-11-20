@@ -1,13 +1,9 @@
+"""Schemas for wardrobe items and outfit suggestions."""
 from pydantic import BaseModel, Field
-from typing import Optional, List
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal
+from typing import Optional, List, Literal
 
-
+"""Base schema for wardrobe items"""
 class WardrobeItemBase(BaseModel):
-    """Base schema for wardrobe items"""
     type: str = Field(..., description="Type of clothing item (e.g., shirt, pants, dress)")
     color: str = Field(..., description="Primary color of the item")
     image_url: Optional[str] = Field(None, description="URL to item image")
@@ -16,11 +12,11 @@ class WardrobeItemBase(BaseModel):
     )
     image_description: Optional[str] = Field(None, description="AI-generated description of the item")
 
-
+"""Wardrobe item with ID"""
 class WardrobeItem(WardrobeItemBase):
-    """Wardrobe item with ID"""
     id: int = Field(..., description="Unique identifier for the item")
 
+    """Configuration for WardrobeItem schema"""
     class Config:
         json_schema_extra = {
             "example": {
@@ -31,32 +27,28 @@ class WardrobeItem(WardrobeItemBase):
             }
         }
 
-
+"""Schema for creating a new wardrobe item"""
 class WardrobeItemCreate(WardrobeItemBase):
-    """Schema for creating a new wardrobe item"""
     pass
 
-
+"""Health check response"""
 class HealthResponse(BaseModel):
-    """Health check response"""
     status: str
 
-
+"""Input for outfit suggestion"""
 class SuggestRequest(BaseModel):
-    """Input for outfit suggestion"""
     text: str
     limit: int = Field(5, ge=1, le=20, description="Number of alternative outfits to generate")
     strategy: Optional[Literal['rules','ml']] = Field('rules', description="Suggestion engine strategy")
 
-
+"""Outfit representation"""
 class Outfit(BaseModel):
     items: List[WardrobeItem]
     score: float = Field(..., description="Outfit score 0-1")
     rationale: Optional[str] = None
 
-
+"""Outfit suggestion response"""
 class SuggestResponse(BaseModel):
-    """Outfit suggestion response"""
     occasion: str
     colors: List[str]
     outfit: Outfit
