@@ -31,6 +31,10 @@ class Settings:
     # Feature flags
     USE_CLOUDINARY: bool = os.getenv("USE_CLOUDINARY", "true").lower() == "true"
     
+    # Embedding batch processing configuration
+    EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))  # Items per batch
+    EMBEDDING_BATCH_TIMEOUT: float = float(os.getenv("EMBEDDING_BATCH_TIMEOUT", "2.0"))  # Seconds to wait for batch
+    
     # RAG (Retrieval-Augmented Generation) Configuration
     RAG_ENABLED: bool = os.getenv("RAG_ENABLED", "true").lower() == "true"
     # Base thresholds (can be overridden by adaptive calculation)
