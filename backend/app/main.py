@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import wardrobe_db as wardrobe
 from app.routers import suggestions_v2
 from app.database import engine, Base
-from sqlalchemy import create_engine
+from app.utils.embedding_service import start_embedding_worker
 from datetime import datetime
 import os
 import asyncio
@@ -13,21 +13,8 @@ from threading import Lock
 _startup_complete = False
 _startup_lock = Lock()
 
-
-# Optimize SQLAlchemy connection pooling
-# You can adjust pool_size and pool_recycle as needed
-DATABASE_URL = os.getenv("DATABASE_URL")
-if DATABASE_URL:
-    engine = create_engine(
-        DATABASE_URL,
-        pool_size=10,           # Number of connections to keep in the pool
-        max_overflow=20,        # Number of connections allowed above pool_size
-        pool_recycle=1800,      # Recycle connections after 30 minutes
-        pool_pre_ping=True      # Check connection health before using
-    )
-    Base.metadata.create_all(bind=engine)
-else:
-    Base.metadata.create_all(bind=engine)
+# Create database tables (engine is already configured with pooling in database.py)
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="STYLO API",
@@ -101,6 +88,15 @@ async def run_startup_migrations() -> None:
     
     # Run startup tasks in background (non-blocking)
     asyncio.create_task(_startup_tasks())
+    
+    # Start embedding worker for async embedding updates (non-blocking)
+    # This runs in the same async context as startup tasks
+    try:
+        start_embedding_worker()
+        print("✅ Embedding worker started")
+    except Exception as e:
+        print(f"⚠️  Could not start embedding worker: {e}. Embeddings will be computed on-demand.")
+    
     print("🚀 Server starting, startup tasks running in background...")
 
 # Admin endpoint for manual backfill trigger

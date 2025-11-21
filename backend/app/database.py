@@ -2,7 +2,7 @@
 """
 Database configuration, session management, and models (PostgreSQL only)
 """
-from sqlalchemy import create_engine, Column, Integer, String, Text
+from sqlalchemy import create_engine, Column, Integer, String, Text, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -17,8 +17,15 @@ DATABASE_URL = os.getenv(
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Create engine (PostgreSQL only)
-engine = create_engine(DATABASE_URL)
+# Create engine with optimized connection pooling
+# Centralized here so SessionLocal and all imports benefit from tuning
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,           # Number of connections to keep in the pool
+    max_overflow=20,        # Number of connections allowed above pool_size
+    pool_recycle=1800,      # Recycle connections after 30 minutes
+    pool_pre_ping=True      # Check connection health before using
+)
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -46,6 +53,7 @@ class WardrobeItem(Base):
     category = Column(String(50), nullable=True, index=True)
     cloudinary_id = Column(String(255), nullable=True)  # For deletion
     image_description = Column(Text, nullable=True)  # AI-generated description
+    embedding = Column(JSON, nullable=True)  # Cached embedding vector (list of floats)
 
     def to_dict(self):
         """Convert to dictionary"""

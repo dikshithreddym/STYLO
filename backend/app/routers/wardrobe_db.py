@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from app.schemas import WardrobeItem as WardrobeItemSchema, WardrobeItemCreate
 from app.database import WardrobeItem as WardrobeItemModel
 from app.database import get_db
@@ -11,6 +12,7 @@ from app.utils.cloudinary_helper import (
 )
 from app.config import settings
 from app.utils.image_analyzer import analyze_clothing_image, generate_fallback_description
+from app.utils.embedding_service import queue_embedding_refresh
 import requests, base64
 import cloudinary
 import cloudinary.api
@@ -90,6 +92,31 @@ async def clear_all_items(db: Session = Depends(get_db)):
     db.query(WardrobeItemModel).delete()
     db.commit()
     return {"status": "ok", "removed": count}
+
+
+class RefreshEmbeddingsRequest(BaseModel):
+    item_ids: Optional[List[int]] = None
+
+
+@router.post("/refresh-embeddings")
+async def refresh_embeddings(
+    request: Optional[RefreshEmbeddingsRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Batch refresh embeddings for wardrobe items.
+    If item_ids is provided in request body, refresh only those items.
+    Otherwise, refresh all items that don't have embeddings yet.
+    """
+    from app.utils.embedding_service import batch_refresh_embeddings
+    
+    item_ids = request.item_ids if request else None
+    refreshed = batch_refresh_embeddings(db, item_ids)
+    return {
+        "status": "ok",
+        "refreshed": refreshed,
+        "message": f"Refreshed embeddings for {refreshed} items"
+    }
 
 
 @router.post("/sync-cloudinary")
@@ -276,6 +303,9 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
     db.commit()
     db.refresh(new_item)
     
+    # Queue async embedding refresh (non-blocking)
+    queue_embedding_refresh(new_item.id)
+    
     return new_item.to_dict()
 
 
@@ -319,8 +349,20 @@ async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Se
         item.image_url = image_url
         item.cloudinary_id = cloudinary_public_id
     
+    # Check if any fields that affect embedding have changed
+    embedding_fields_changed = (
+        payload.type != item.type or
+        payload.color != item.color or
+        payload.category != item.category or
+        (payload.image_url and payload.image_url != item.image_url)
+    )
+    
     db.commit()
     db.refresh(item)
+    
+    # Queue async embedding refresh if relevant fields changed (non-blocking)
+    if embedding_fields_changed:
+        queue_embedding_refresh(item.id)
     
     return item.to_dict()
 

@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 from .embedding import Embedder
 from ..database import WardrobeItem
 from ..config import settings
+from ..utils.profiler import get_profiler
+from ..utils.embedding_service import get_stored_embedding, compute_embedding_for_item, persist_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +43,9 @@ def _create_searchable_text(item: WardrobeItem) -> str:
 def retrieve_relevant_items(
     query: str,
     db: Session,
-    limit_per_category: int = 20,
-    min_items_per_category: int = 3,
-    min_total_items: int = 10,
+    limit_per_category: Optional[int] = None,
+    min_items_per_category: Optional[int] = None,
+    min_total_items: Optional[int] = None,
     use_intent_boost: bool = True
 ) -> List[WardrobeItem]:
     """
@@ -52,68 +54,112 @@ def retrieve_relevant_items(
     Args:
         query: User's outfit request (e.g., "business meeting", "casual date")
         db: Database session
-        limit_per_category: Maximum items to retrieve per category (default: 20)
-        min_items_per_category: Minimum items required per category before fallback (default: 3)
-        min_total_items: Minimum total items required before fallback to full wardrobe (default: 10)
+        limit_per_category: Maximum items to retrieve per category (None = auto-calculate from data volume)
+        min_items_per_category: Minimum items required per category before fallback (None = auto-calculate)
+        min_total_items: Minimum total items required before fallback to full wardrobe (None = auto-calculate)
         use_intent_boost: Whether to boost items based on intent classification (default: True)
     
     Returns:
         List of WardrobeItem objects, filtered by semantic relevance
     """
     try:
+        profiler = get_profiler()
+        
         # Get all wardrobe items from database
-        all_items = db.query(WardrobeItem).all()
+        with profiler.measure("db_query_all_items"):
+            all_items = db.query(WardrobeItem).all()
         
         if not all_items:
             logger.info("No wardrobe items found in database")
             return []
         
+        # Calculate adaptive thresholds based on data volume if not provided
+        if limit_per_category is None or min_items_per_category is None or min_total_items is None:
+            adaptive_thresholds = settings.get_adaptive_rag_thresholds(len(all_items))
+            limit_per_category = limit_per_category or adaptive_thresholds["limit_per_category"]
+            min_items_per_category = min_items_per_category or adaptive_thresholds["min_items_per_category"]
+            min_total_items = min_total_items or adaptive_thresholds["min_total_items"]
+            logger.debug(f"Adaptive RAG thresholds for {len(all_items)} items: "
+                        f"limit_per_category={limit_per_category}, "
+                        f"min_items_per_category={min_items_per_category}, "
+                        f"min_total_items={min_total_items}")
+        
         # If wardrobe is small, return all items (no need for filtering)
         if len(all_items) < min_total_items:
-            logger.info(f"Wardrobe size ({len(all_items)}) is below minimum, returning all items")
+            logger.info(f"Wardrobe size ({len(all_items)}) is below minimum ({min_total_items}), returning all items")
             return all_items
         
         # Initialize embedder
         emb = Embedder.instance()
         
         # Compute query embedding
-        query_embedding = emb.encode([query])[0]
+        with profiler.measure("embedding_query"):
+            query_embedding = emb.encode([query])[0]
         
         # Optionally compute intent embedding for hybrid scoring
         intent_embedding = None
         if use_intent_boost:
             try:
-                from .intent import classify_intent_zero_shot
-                intent_obj = classify_intent_zero_shot(query)
-                intent_label = getattr(intent_obj, "label", "casual")
-                intent_embedding = emb.encode([intent_label])[0]
+                with profiler.measure("embedding_intent"):
+                    from .intent import classify_intent_zero_shot
+                    intent_obj = classify_intent_zero_shot(query)
+                    intent_label = getattr(intent_obj, "label", "casual")
+                    intent_embedding = emb.encode([intent_label])[0]
             except Exception as e:
                 logger.warning(f"Failed to compute intent embedding: {e}")
         
         # Group items by category
         items_by_category: Dict[str, List[Tuple[WardrobeItem, float]]] = {}
         
-        # Score all items
-        item_texts = []
+        # Score all items - use stored embeddings when available
         item_objects = []
+        item_embeddings_list = []
+        items_needing_embedding = []
+        item_texts_needing_embedding = []
         
         for item in all_items:
             searchable_text = _create_searchable_text(item)
             if not searchable_text:
                 continue
-            item_texts.append(searchable_text)
-            item_objects.append(item)
+            
+            # Try to use stored embedding first
+            stored_embedding = get_stored_embedding(item)
+            if stored_embedding is not None:
+                item_objects.append(item)
+                item_embeddings_list.append(stored_embedding)
+            else:
+                # Queue for batch computation
+                items_needing_embedding.append(item)
+                item_texts_needing_embedding.append(searchable_text)
         
-        if not item_texts:
+        # Compute embeddings for items that don't have stored embeddings
+        if items_needing_embedding:
+            try:
+                with profiler.measure("embedding_items_batch"):
+                    computed_embeddings = emb.encode(item_texts_needing_embedding)
+                
+                # Store computed embeddings asynchronously (non-blocking)
+                for item, embedding_vec in zip(items_needing_embedding, computed_embeddings):
+                    item_objects.append(item)
+                    item_embeddings_list.append(embedding_vec)
+                    # Queue async persistence (non-blocking)
+                    from ..utils.embedding_service import queue_embedding_refresh
+                    queue_embedding_refresh(item.id)
+            except Exception as e:
+                logger.error(f"Failed to compute item embeddings: {e}")
+                # Fallback: include items without embeddings (they'll be scored as 0)
+                item_objects.extend(items_needing_embedding)
+                # Create zero embeddings for failed items
+                if item_objects:
+                    embedding_dim = len(item_embeddings_list[0]) if item_embeddings_list else 384
+                    zero_emb = np.zeros(embedding_dim, dtype=np.float32)
+                    item_embeddings_list.extend([zero_emb] * len(items_needing_embedding))
+        
+        if not item_objects:
             logger.warning("No items with searchable text found")
             return all_items  # Fallback to all items
         
-        # Compute embeddings for all items in batch
-        try:
-            item_embeddings = emb.encode(item_texts)
-        except Exception as e:
-            logger.error(f"Failed to compute item embeddings: {e}")
-            return all_items  # Fallback to all items
+        item_embeddings = np.array(item_embeddings_list)
         
         # Score items by similarity
         for item, item_emb in zip(item_objects, item_embeddings):

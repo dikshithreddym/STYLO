@@ -6,6 +6,8 @@ import numpy as np
 
 from .embedding import Embedder
 from .color_matcher import infer_palette, palette_score
+from ..utils.profiler import get_profiler
+from ..utils.embedding_service import get_stored_embedding, queue_embedding_refresh
 
 
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:
@@ -144,8 +146,11 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
     wardrobe: list of dicts with at least keys: id, category, name, color (optional)
     returns: list of dicts mapping category -> item
     """
+    profiler = get_profiler()
     emb = Embedder.instance()
-    qv = emb.encode([query])[0]
+    
+    with profiler.measure("embedding_query_selector"):
+        qv = emb.encode([query])[0]
 
     # One-per-category pools
     pools: Dict[str, List[Dict]] = {}
@@ -172,20 +177,57 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
     #   - Higher query weight: Prefers items with "blue" in description
     #   - Higher intent weight: Prefers items matching "business" style regardless of color
     #
-    label_vec = emb.encode([label])[0]
+    with profiler.measure("embedding_intent_label"):
+        label_vec = emb.encode([label])[0]
     cat_best: Dict[str, List[Tuple[Dict, float]]] = {}
-    for cat, items in pools.items():
-        scored: List[Tuple[Dict, float]] = []
-        names = [f"{it.get('name','')} {it.get('description','')}".strip() for it in items]
-        vecs = emb.encode(names)
-        for it, v in zip(items, vecs):
-            s1 = _cosine(qv, v)  # Query similarity (TUNE: adjust weight below)
-            s2 = _cosine(label_vec, v)  # Intent similarity (TUNE: adjust weight below)
-            raw = 0.6 * s1 + 0.4 * s2  # TUNE THIS LINE: Change 0.6/0.4 to adjust query vs intent importance
-            score = _apply_intent_bias(label, cat, (f"{it.get('name','')} {it.get('description','')}").lower(), raw)
-            scored.append((it, score))
-        scored.sort(key=lambda x: x[1], reverse=True)
-        cat_best[cat] = scored[:8]  # TUNE: Increase 8 → 12 for more diversity, decrease → 5 for faster performance
+    
+    # Measure all category embeddings together (batch processing)
+    # Use stored embeddings when available to avoid model calls
+    with profiler.measure("embedding_category_items"):
+        for cat, items in pools.items():
+            scored: List[Tuple[Dict, float]] = []
+            names = [f"{it.get('name','')} {it.get('description','')}".strip() for it in items]
+            
+            # Check if items have stored embeddings
+            vecs = []
+            items_needing_embedding_indices = []
+            names_needing_embedding = []
+            
+            for i, it in enumerate(items):
+                embedding_list = it.get('embedding')
+                if embedding_list and isinstance(embedding_list, list):
+                    # Convert stored embedding list to numpy array
+                    try:
+                        stored_emb = np.array(embedding_list, dtype=np.float32)
+                        vecs.append(stored_emb)
+                    except Exception:
+                        # Fallback to computing if deserialization fails
+                        items_needing_embedding_indices.append(i)
+                        names_needing_embedding.append(names[i])
+                        vecs.append(None)  # Placeholder
+                else:
+                    items_needing_embedding_indices.append(i)
+                    names_needing_embedding.append(names[i])
+                    vecs.append(None)  # Placeholder
+            
+            # Compute embeddings only for items that don't have stored embeddings
+            if names_needing_embedding:
+                computed_vecs = emb.encode(names_needing_embedding)
+                # Fill in the computed embeddings
+                for idx, computed_vec in zip(items_needing_embedding_indices, computed_vecs):
+                    vecs[idx] = computed_vec
+                    # Queue async embedding persistence for items without stored embeddings
+                    item_id = items[idx].get('id')
+                    if item_id:
+                        queue_embedding_refresh(item_id)
+            for it, v in zip(items, vecs):
+                s1 = _cosine(qv, v)  # Query similarity (TUNE: adjust weight below)
+                s2 = _cosine(label_vec, v)  # Intent similarity (TUNE: adjust weight below)
+                raw = 0.6 * s1 + 0.4 * s2  # TUNE THIS LINE: Change 0.6/0.4 to adjust query vs intent importance
+                score = _apply_intent_bias(label, cat, (f"{it.get('name','')} {it.get('description','')}").lower(), raw)
+                scored.append((it, score))
+            scored.sort(key=lambda x: x[1], reverse=True)
+            cat_best[cat] = scored[:8]  # TUNE: Increase 8 → 12 for more diversity, decrease → 5 for faster performance
 
     # Hard filter for business/formal: block tees, shorts, hoodies, sneakers, joggers, fleece, sweatpants, athletic
     if label in {"business", "formal"}:
@@ -343,7 +385,38 @@ def assemble_outfits(query: str, wardrobe: List[Dict], label: str, k: int = 3) -
         palette = infer_palette(o)
         cscore = palette_score(palette)  # Color harmony score (0-1, higher = better color match)
         item_texts = [f"{v.get('name','')} {v.get('description','')}".strip() for v in o.values()]
-        ivecs = emb.encode(item_texts)
+        # Try to use stored embeddings for outfit items
+        ivecs = []
+        items_needing_embedding_indices = []
+        texts_needing_embedding = []
+        
+        for i, (cat, item) in enumerate(o.items()):
+            embedding_list = item.get('embedding')
+            if embedding_list and isinstance(embedding_list, list):
+                try:
+                    stored_emb = np.array(embedding_list, dtype=np.float32)
+                    ivecs.append(stored_emb)
+                except Exception:
+                    # Fallback to computing if deserialization fails
+                    items_needing_embedding_indices.append(i)
+                    texts_needing_embedding.append(item_texts[i])
+                    ivecs.append(None)  # Placeholder
+            else:
+                items_needing_embedding_indices.append(i)
+                texts_needing_embedding.append(item_texts[i])
+                ivecs.append(None)  # Placeholder
+        
+        # Compute embeddings only for items without stored embeddings
+        if texts_needing_embedding:
+            with profiler.measure("embedding_outfit_scoring"):
+                computed_ivecs = emb.encode(texts_needing_embedding)
+                # Fill in the computed embeddings
+                for idx, computed_vec in zip(items_needing_embedding_indices, computed_ivecs):
+                    ivecs[idx] = computed_vec
+                    # Queue async embedding persistence
+                    item_id = list(o.values())[idx].get('id') if idx < len(o) else None
+                    if item_id:
+                        queue_embedding_refresh(item_id)
         sims = [max(0.0, _cosine(qv, v)) for v in ivecs]
         sem = float(np.mean(sims)) if sims else 0.5  # Average semantic similarity (0-1)
         # TUNE THIS LINE: Adjust color vs semantic weights to change outfit selection priority
