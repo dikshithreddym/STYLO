@@ -209,12 +209,14 @@ def cache_clear_pattern(pattern: str) -> int:
 def get_cached_suggestion(query: str, wardrobe_hash: str) -> Optional[Dict]:
     """Get cached outfit suggestion."""
     key = _generate_cache_key("suggestion", query, wardrobe_hash)
+    logger.debug(f"Getting cached suggestion with key: suggestion:{hashlib.md5(f'{query}:{wardrobe_hash}'.encode()).hexdigest()[:16]}")
     return cache_get(key, cache_name="suggestions")
 
 
 def set_cached_suggestion(query: str, wardrobe_hash: str, result: Dict, ttl: int = 300) -> bool:
     """Cache outfit suggestion."""
     key = _generate_cache_key("suggestion", query, wardrobe_hash)
+    logger.debug(f"Setting cached suggestion with key: suggestion:{hashlib.md5(f'{query}:{wardrobe_hash}'.encode()).hexdigest()[:16]}")
     return cache_set(key, result, ttl=ttl, cache_name="suggestions")
 
 

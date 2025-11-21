@@ -111,21 +111,26 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         return V2SuggestResponse(intent="none", outfits=[])
     
     # Generate cache key based on query and wardrobe items
+    # Use sorted IDs to ensure consistent hash even if items come in different order
+    # For caching, we use the query + total wardrobe count + sorted item IDs
+    # This ensures same query with same wardrobe items gets cached
+    wardrobe_ids = sorted([it.get("id") for it in wardrobe])
     wardrobe_hash = hashlib.md5(
-        json.dumps([(it.get("id"), it.get("category")) for it in wardrobe[:20]], sort_keys=True).encode()
+        json.dumps({"query": text.lower().strip(), "item_ids": wardrobe_ids, "count": len(wardrobe)}, sort_keys=True).encode()
     ).hexdigest()
     
     # Check cache first
     import logging
     logger = logging.getLogger(__name__)
-    logger.info(f"Checking cache for query: '{text}', wardrobe_hash: {wardrobe_hash[:8]}...")
+    cache_key_str = f"{text}:{wardrobe_hash[:8]}"
+    logger.info(f"Checking cache for query: '{text}', wardrobe_hash: {wardrobe_hash[:8]}, items: {len(wardrobe)}")
     cached_result = get_cached_suggestion(text, wardrobe_hash)
     if cached_result:
-        logger.info(f"✅ CACHE HIT for query: '{text}'")
+        logger.info(f"✅ CACHE HIT for query: '{text}', hash: {wardrobe_hash[:8]}")
         profiler.log_summary("[Suggest] [CACHED] ")
         return V2SuggestResponse(**cached_result)
     else:
-        logger.info(f"❌ CACHE MISS for query: '{text}' - will compute and cache result")
+        logger.info(f"❌ CACHE MISS for query: '{text}', hash: {wardrobe_hash[:8]} - will compute and cache result")
 
     # 2) Try Gemini API first
     gemini_api_key = os.getenv("GEMINI_API_KEY")
