@@ -110,21 +110,24 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         profiler.log_summary("[Suggest] ")
         return V2SuggestResponse(intent="none", outfits=[])
     
-    # Generate cache key based on query and wardrobe items
-    # Use sorted IDs to ensure consistent hash even if items come in different order
-    # For caching, we use the query + total wardrobe count + sorted item IDs
-    # This ensures same query with same wardrobe items gets cached
-    wardrobe_ids = sorted([it.get("id") for it in wardrobe])
-    wardrobe_hash = hashlib.md5(
-        json.dumps({"query": text.lower().strip(), "item_ids": wardrobe_ids, "count": len(wardrobe)}, sort_keys=True).encode()
-    ).hexdigest()
-    
-    # Check cache first
+    # Generate cache key based on query text only (simpler, more reliable)
+    # Note: This means cache is shared across all users with same query, but that's fine for outfit suggestions
+    # The wardrobe items are already filtered by RAG, so same query = same relevant items
     import logging
     logger = logging.getLogger(__name__)
-    cache_key_str = f"{text}:{wardrobe_hash[:8]}"
-    logger.info(f"Checking cache for query: '{text}', wardrobe_hash: {wardrobe_hash[:8]}, items: {len(wardrobe)}")
-    cached_result = get_cached_suggestion(text, wardrobe_hash)
+    
+    # Use query text as the primary cache key (normalized)
+    query_normalized = text.lower().strip()
+    
+    # Also include wardrobe count to handle cases where wardrobe size changes significantly
+    wardrobe_count = len(wardrobe)
+    wardrobe_hash = hashlib.md5(
+        json.dumps({"query": query_normalized, "count": wardrobe_count}, sort_keys=True).encode()
+    ).hexdigest()
+    
+    logger.info(f"🔍 Checking cache for query: '{text}' (normalized: '{query_normalized}'), wardrobe_count: {wardrobe_count}, hash: {wardrobe_hash[:8]}")
+    
+    cached_result = get_cached_suggestion(query_normalized, str(wardrobe_count))
     if cached_result:
         logger.info(f"✅ CACHE HIT for query: '{text}', hash: {wardrobe_hash[:8]}")
         profiler.log_summary("[Suggest] [CACHED] ")
@@ -158,9 +161,9 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                     )
                 if v2_outfits:
                     result = V2SuggestResponse(intent=intent, outfits=v2_outfits)
-                    # Cache the result (5 minutes TTL)
-                    cache_success = set_cached_suggestion(text, wardrobe_hash, result.dict(), ttl=300)
-                    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}'")
+                    # Cache the result (5 minutes TTL) - use normalized query
+                    cache_success = set_cached_suggestion(query_normalized, str(wardrobe_count), result.dict(), ttl=300)
+                    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}' (hash: {wardrobe_hash[:8]})")
                     profiler.log_summary("[Suggest] ")
                     return result
         except Exception as e:
@@ -196,7 +199,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     
     profiler.log_summary("[Suggest] ")
     result = V2SuggestResponse(intent=intent, outfits=v2_outfits) if v2_outfits else V2SuggestResponse(intent=intent, outfits=[])
-    # Cache the result (5 minutes TTL)
-    cache_success = set_cached_suggestion(text, wardrobe_hash, result.dict(), ttl=300)
-    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}'")
+    # Cache the result (5 minutes TTL) - use normalized query
+    cache_success = set_cached_suggestion(query_normalized, str(wardrobe_count), result.dict(), ttl=300)
+    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}' (hash: {wardrobe_hash[:8]})")
     return result

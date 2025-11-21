@@ -216,7 +216,7 @@ async def root():
 @app.get("/test-redis")
 async def test_redis():
     """Test Redis connection and caching"""
-    from app.utils.cache import get_redis_client, cache_set, cache_get
+    from app.utils.cache import get_redis_client, cache_set, cache_get, get_cached_suggestion, set_cached_suggestion
     import logging
     
     logger = logging.getLogger(__name__)
@@ -249,6 +249,16 @@ async def test_redis():
         direct_set = redis_client.set("test:direct", "test_value", ex=60)
         direct_get = redis_client.get("test:direct")
         
+        # Test suggestion cache functions
+        test_query = "business meeting"
+        test_hash = "10"
+        test_suggestion = {"intent": "business", "outfits": [{"test": "outfit"}]}
+        set_cached_suggestion(test_query, test_hash, test_suggestion, ttl=60)
+        cached_suggestion = get_cached_suggestion(test_query, test_hash)
+        
+        # Check Redis keys
+        all_keys = redis_client.keys("suggestion:*")
+        
         return {
             "status": "connected",
             "message": "Redis is working!",
@@ -257,6 +267,10 @@ async def test_redis():
             "set_get_test": "PASSED" if cached == test_value else "FAILED",
             "cached_value": cached,
             "direct_redis_test": "PASSED" if direct_get == "test_value" else "FAILED",
+            "suggestion_cache_test": "PASSED" if cached_suggestion == test_suggestion else "FAILED",
+            "cached_suggestion": cached_suggestion,
+            "redis_keys_count": len(all_keys),
+            "sample_keys": [k[:50] for k in list(all_keys)[:5]],
             "redis_url": os.getenv("REDIS_URL", "not set")[:50] + "..." if os.getenv("REDIS_URL") else "not set"
         }
     except Exception as e:
