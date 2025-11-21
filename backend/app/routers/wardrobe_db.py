@@ -13,9 +13,11 @@ from app.utils.cloudinary_helper import (
 from app.config import settings
 from app.utils.image_analyzer import analyze_clothing_image, generate_fallback_description
 from app.utils.embedding_service import queue_embedding_refresh
+from app.utils.cache import get_cached_wardrobe_list, set_cached_wardrobe_list, cache_clear_pattern
 import requests, base64
 import cloudinary
 import cloudinary.api
+import hashlib
 
 router = APIRouter()
 
@@ -37,7 +39,21 @@ async def get_wardrobe_items(
 ):
     """
     Get wardrobe items with optional filtering and sorting.
+    Uses caching for improved performance.
     """
+    # Generate cache key from query parameters
+    cache_key_data = f"{q}:{type}:{color}:{category}:{sort}:{page}:{page_size}"
+    cache_key = hashlib.md5(cache_key_data.encode()).hexdigest()
+    
+    # Check cache first (only for non-filtered queries to avoid stale data)
+    if not q and not type and not color and not category:
+        cached_items = get_cached_wardrobe_list(cache_key)
+        if cached_items is not None:
+            # Get total count from database
+            total = db.query(WardrobeItemModel).count()
+            response.headers["X-Total-Count"] = str(total)
+            return cached_items
+    
     query = db.query(WardrobeItemModel)
 
     # Filtering
@@ -73,8 +89,14 @@ async def get_wardrobe_items(
 
     # Set total count header
     response.headers["X-Total-Count"] = str(total)
+    
+    result = [item.to_dict() for item in items]
+    
+    # Cache the result (only for non-filtered queries, 1 minute TTL)
+    if not q and not type and not color and not category:
+        set_cached_wardrobe_list(cache_key, result, ttl=60)
 
-    return [item.to_dict() for item in items]
+    return result
 
 
 # IMPORTANT: Specific routes must come BEFORE parameterized routes like /{item_id}
@@ -306,6 +328,9 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
     # Queue async embedding refresh (non-blocking)
     queue_embedding_refresh(new_item.id)
     
+    # Invalidate wardrobe list cache
+    cache_clear_pattern("wardrobe_list:*")
+    
     return new_item.to_dict()
 
 
@@ -360,6 +385,10 @@ async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Se
     db.commit()
     db.refresh(item)
     
+    # Invalidate wardrobe list cache and suggestion cache
+    cache_clear_pattern("wardrobe_list:*")
+    cache_clear_pattern("suggestion:*")
+    
     # Queue async embedding refresh if relevant fields changed (non-blocking)
     if embedding_fields_changed:
         queue_embedding_refresh(item.id)
@@ -382,6 +411,10 @@ async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db)):
     
     db.delete(item)
     db.commit()
+    
+    # Invalidate wardrobe list cache and suggestion cache
+    cache_clear_pattern("wardrobe_list:*")
+    cache_clear_pattern("suggestion:*")
     
     return Response(status_code=204)
 

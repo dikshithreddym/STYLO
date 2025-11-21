@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import List, Optional, Tuple
 
 import numpy as np
 
 from .embedding import Embedder
+from ..utils.cache import get_cached_intent, set_cached_intent
 
 
 LABELS = [
@@ -64,7 +65,15 @@ def classify_intent_zero_shot(text: str) -> Intent:
     """Zero-shot classify text into one of LABELS using seed descriptions.
 
     Returns best label and per-label scores for transparency.
+    Uses caching to improve performance for repeated queries.
     """
+    # Check cache first
+    cached = get_cached_intent(text)
+    if cached:
+        # Convert cached scores back to list of tuples
+        scores = [(label, score) for label, score in cached["scores"]]
+        return Intent(label=cached["label"], scores=scores)
+    
     emb = Embedder.instance()
     # Build seed bank
     seed_texts: List[str] = []
@@ -86,4 +95,8 @@ def classify_intent_zero_shot(text: str) -> Intent:
     averaged = {l: float(np.mean(vals)) if vals else 0.0 for l, vals in label_scores.items()}
     ranked = sorted(averaged.items(), key=lambda x: x[1], reverse=True)
     best = ranked[0][0] if ranked else "casual"
-    return Intent(label=best, scores=ranked)
+    result = Intent(label=best, scores=ranked)
+    
+    # Cache the result (1 hour TTL)
+    set_cached_intent(text, {"label": result.label, "scores": result.scores}, ttl=3600)
+    return result

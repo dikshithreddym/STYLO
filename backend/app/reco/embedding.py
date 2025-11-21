@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from threading import Lock
 from typing import List, Optional
+from functools import lru_cache
 
 import os
 
@@ -22,7 +23,9 @@ class Embedder:
         self.model = SentenceTransformer(name)
 
     @classmethod
+    @lru_cache(maxsize=1)
     def instance(cls) -> "Embedder":
+        """Get singleton embedder instance with LRU cache."""
         if not cls._instance:
             with cls._lock:
                 if not cls._instance:

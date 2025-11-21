@@ -15,6 +15,9 @@ from ..reco.retriever import retrieve_relevant_items
 from ..utils.gemini_suggest import suggest_outfit_with_gemini
 from ..utils.profiler import get_profiler, reset_profiler
 from ..config import settings
+from ..utils.cache import get_cached_suggestion, set_cached_suggestion
+import hashlib
+import json
 
 
 router = APIRouter(prefix="/v2", tags=["suggestions-v2"])
@@ -106,6 +109,17 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     if not wardrobe:
         profiler.log_summary("[Suggest] ")
         return V2SuggestResponse(intent="none", outfits=[])
+    
+    # Generate cache key based on query and wardrobe items
+    wardrobe_hash = hashlib.md5(
+        json.dumps([(it.get("id"), it.get("category")) for it in wardrobe[:20]], sort_keys=True).encode()
+    ).hexdigest()
+    
+    # Check cache first
+    cached_result = get_cached_suggestion(text, wardrobe_hash)
+    if cached_result:
+        profiler.log_summary("[Suggest] [CACHED] ")
+        return V2SuggestResponse(**cached_result)
 
     # 2) Try Gemini API first
     gemini_api_key = os.getenv("GEMINI_API_KEY")
@@ -132,8 +146,11 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                         )
                     )
                 if v2_outfits:
+                    result = V2SuggestResponse(intent=intent, outfits=v2_outfits)
+                    # Cache the result (5 minutes TTL)
+                    set_cached_suggestion(text, wardrobe_hash, result.dict(), ttl=300)
                     profiler.log_summary("[Suggest] ")
-                    return V2SuggestResponse(intent=intent, outfits=v2_outfits)
+                    return result
         except Exception as e:
             print(f"Gemini suggestion failed, falling back to semantic engine: {e}")
 
@@ -166,6 +183,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         )
     
     profiler.log_summary("[Suggest] ")
-    if v2_outfits:
-        return V2SuggestResponse(intent=intent, outfits=v2_outfits)
-    return V2SuggestResponse(intent=intent, outfits=[])
+    result = V2SuggestResponse(intent=intent, outfits=v2_outfits) if v2_outfits else V2SuggestResponse(intent=intent, outfits=[])
+    # Cache the result (5 minutes TTL)
+    set_cached_suggestion(text, wardrobe_hash, result.dict(), ttl=300)
+    return result
