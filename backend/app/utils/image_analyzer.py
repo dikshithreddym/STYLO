@@ -4,6 +4,7 @@ Image analysis utility using AI to generate clothing descriptions
 import httpx
 import re
 import logging
+import asyncio
 from typing import Optional
 from app.config import settings
 
@@ -39,8 +40,11 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
             logger.error("Failed to extract base64 data from image")
             return None
 
-        # Call Google Gemini Vision API (use gemini-2.0-flash-lite for consistency)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={gemini_api_key}"
+        logger.info(f"Extracted base64 data, length: {len(base64_data)} characters")
+
+        # Using gemini-2.0-flash model
+        model_name = "gemini-2.0-flash"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={gemini_api_key}"
 
         headers = {
             "Content-Type": "application/json"
@@ -62,28 +66,83 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
             }]
         }
 
+        logger.info(f"Calling Gemini API with model: {model_name}")
+        
+        # Retry logic for rate limits (429 errors)
+        max_retries = 3
+        retry_delay = 2  # Start with 2 seconds
+        
         async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, json=payload, timeout=30)
+            for attempt in range(max_retries):
+                response = await client.post(url, headers=headers, json=payload, timeout=30)
+                
+                logger.info(f"Gemini API response status: {response.status_code} (attempt {attempt + 1}/{max_retries})")
+
+                if response.status_code == 200:
+                    break  # Success, exit retry loop
+                
+                # Handle rate limiting (429) with retry
+                if response.status_code == 429:
+                    error_json = {}
+                    try:
+                        error_json = response.json()
+                    except:
+                        pass
+                    
+                    error_message = error_json.get('error', {}).get('message', 'Rate limit exceeded')
+                    
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            f"Gemini API rate limit hit (429). "
+                            f"Retrying in {retry_delay} seconds... "
+                            f"Error: {error_message}"
+                        )
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        logger.error(
+                            f"Gemini API rate limit exceeded after {max_retries} attempts. "
+                            f"Quota may be exhausted. Using fallback description. "
+                            f"Error: {error_message}"
+                        )
+                        return None
+                else:
+                    # Other errors - log and return None
+                    error_text = response.text
+                    logger.error(f"Gemini API error: {response.status_code} - {error_text}")
+                    try:
+                        error_json = response.json()
+                        logger.error(f"Gemini API error details: {error_json}")
+                    except:
+                        pass
+                    return None
 
         if response.status_code != 200:
-            logger.error(f"Gemini API error: {response.status_code} - {response.text}")
             return None
 
         result = response.json()
+        logger.debug(f"Gemini API response structure: {list(result.keys())}")
+        
         if 'candidates' not in result or not result['candidates']:
-            logger.error("No candidates in Gemini response.")
+            logger.error(f"No candidates in Gemini response. Response keys: {list(result.keys())}")
+            logger.error(f"Full response: {result}")
             return None
 
         content = result['candidates'][0]['content']
         if 'parts' not in content or not content['parts']:
-            logger.error("No parts in Gemini response content.")
+            logger.error(f"No parts in Gemini response content. Content keys: {list(content.keys())}")
+            logger.error(f"Full content: {content}")
             return None
 
         description = content['parts'][0]['text'].strip()
+        logger.info(f"Successfully generated description: {description[:100]}...")
         return description
 
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error analyzing image: {type(e).__name__}: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Error analyzing image: {e}")
+        logger.error(f"Error analyzing image: {type(e).__name__}: {e}", exc_info=True)
         return None
 
 
