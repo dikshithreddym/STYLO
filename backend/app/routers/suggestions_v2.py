@@ -116,10 +116,16 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     ).hexdigest()
     
     # Check cache first
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Checking cache for query: '{text}', wardrobe_hash: {wardrobe_hash[:8]}...")
     cached_result = get_cached_suggestion(text, wardrobe_hash)
     if cached_result:
+        logger.info(f"✅ CACHE HIT for query: '{text}'")
         profiler.log_summary("[Suggest] [CACHED] ")
         return V2SuggestResponse(**cached_result)
+    else:
+        logger.info(f"❌ CACHE MISS for query: '{text}' - will compute and cache result")
 
     # 2) Try Gemini API first
     gemini_api_key = os.getenv("GEMINI_API_KEY")
@@ -148,7 +154,8 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                 if v2_outfits:
                     result = V2SuggestResponse(intent=intent, outfits=v2_outfits)
                     # Cache the result (5 minutes TTL)
-                    set_cached_suggestion(text, wardrobe_hash, result.dict(), ttl=300)
+                    cache_success = set_cached_suggestion(text, wardrobe_hash, result.dict(), ttl=300)
+                    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}'")
                     profiler.log_summary("[Suggest] ")
                     return result
         except Exception as e:
@@ -185,5 +192,6 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     profiler.log_summary("[Suggest] ")
     result = V2SuggestResponse(intent=intent, outfits=v2_outfits) if v2_outfits else V2SuggestResponse(intent=intent, outfits=[])
     # Cache the result (5 minutes TTL)
-    set_cached_suggestion(text, wardrobe_hash, result.dict(), ttl=300)
+    cache_success = set_cached_suggestion(text, wardrobe_hash, result.dict(), ttl=300)
+    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}'")
     return result

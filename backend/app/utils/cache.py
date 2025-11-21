@@ -32,6 +32,7 @@ def get_redis_client():
     """Get or create Redis client with connection pooling."""
     global _redis_client
     if not REDIS_AVAILABLE:
+        logger.debug("Redis library not available")
         return None
     
     if _redis_client is None:
@@ -39,6 +40,7 @@ def get_redis_client():
             # Check for REDIS_URL first (Render/cloud provider format)
             redis_url = os.getenv('REDIS_URL')
             if redis_url:
+                logger.info(f"Attempting Redis connection via REDIS_URL: {redis_url[:50]}...")
                 # Parse Redis URL format: redis://host:port or redis://:password@host:port
                 _redis_client = redis.from_url(
                     redis_url,
@@ -49,8 +51,8 @@ def get_redis_client():
                     health_check_interval=30
                 )
                 # Test connection
-                _redis_client.ping()
-                logger.info(f"Redis connected via REDIS_URL")
+                ping_result = _redis_client.ping()
+                logger.info(f"✅ Redis connected via REDIS_URL (ping: {ping_result})")
             else:
                 # Fallback to individual environment variables
                 redis_host = os.getenv('REDIS_HOST', 'localhost')
@@ -58,6 +60,7 @@ def get_redis_client():
                 redis_db = int(os.getenv('REDIS_DB', '0'))
                 redis_password = os.getenv('REDIS_PASSWORD', None)
                 
+                logger.info(f"Attempting Redis connection: {redis_host}:{redis_port}/{redis_db}")
                 _redis_client = redis.Redis(
                     host=redis_host,
                     port=redis_port,
@@ -70,10 +73,10 @@ def get_redis_client():
                     health_check_interval=30
                 )
                 # Test connection
-                _redis_client.ping()
-                logger.info(f"Redis connected: {redis_host}:{redis_port}/{redis_db}")
+                ping_result = _redis_client.ping()
+                logger.info(f"✅ Redis connected: {redis_host}:{redis_port}/{redis_db} (ping: {ping_result})")
         except Exception as e:
-            logger.warning(f"Redis connection failed: {e}. Using in-memory cache only.")
+            logger.warning(f"❌ Redis connection failed: {e}. Using in-memory cache only.", exc_info=True)
             _redis_client = None
     
     return _redis_client
@@ -102,16 +105,26 @@ def cache_get(key: str, cache_name: str = "default") -> Optional[Any]:
         try:
             cached = redis_client.get(key)
             if cached:
+                logger.debug(f"✅ Redis cache HIT for key: {key[:50]}...")
                 return json.loads(cached)
+            else:
+                logger.debug(f"❌ Redis cache MISS for key: {key[:50]}...")
         except Exception as e:
-            logger.warning(f"Redis get failed for key {key}: {e}")
+            logger.warning(f"Redis get failed for key {key[:50]}...: {e}")
+    else:
+        logger.debug(f"Redis not available, trying in-memory cache for key: {key[:50]}...")
     
     # Fallback to in-memory cache
     try:
         in_mem_cache = get_in_memory_cache(cache_name)
-        return in_mem_cache.get(key)
+        result = in_mem_cache.get(key)
+        if result:
+            logger.debug(f"✅ In-memory cache HIT for key: {key[:50]}...")
+        else:
+            logger.debug(f"❌ In-memory cache MISS for key: {key[:50]}...")
+        return result
     except Exception as e:
-        logger.warning(f"In-memory cache get failed for key {key}: {e}")
+        logger.warning(f"In-memory cache get failed for key {key[:50]}...: {e}")
     
     return None
 
@@ -123,17 +136,21 @@ def cache_set(key: str, value: Any, ttl: int = 300, cache_name: str = "default")
     if redis_client:
         try:
             redis_client.setex(key, ttl, json.dumps(value))
+            logger.debug(f"✅ Redis cache SET for key: {key[:50]}... (TTL: {ttl}s)")
             return True
         except Exception as e:
-            logger.warning(f"Redis set failed for key {key}: {e}")
+            logger.warning(f"Redis set failed for key {key[:50]}...: {e}")
+    else:
+        logger.debug(f"Redis not available, using in-memory cache for key: {key[:50]}...")
     
     # Fallback to in-memory cache
     try:
         in_mem_cache = get_in_memory_cache(cache_name, ttl=ttl)
         in_mem_cache[key] = value
+        logger.debug(f"✅ In-memory cache SET for key: {key[:50]}... (TTL: {ttl}s)")
         return True
     except Exception as e:
-        logger.warning(f"In-memory cache set failed for key {key}: {e}")
+        logger.warning(f"In-memory cache set failed for key {key[:50]}...: {e}")
     
     return False
 

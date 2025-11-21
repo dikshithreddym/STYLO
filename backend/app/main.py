@@ -211,3 +211,61 @@ async def root():
         "version": "1.0.0",
         "docs": "/docs"
     }
+
+
+@app.get("/test-redis")
+async def test_redis():
+    """Test Redis connection and caching"""
+    from app.utils.cache import get_redis_client, cache_set, cache_get
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    redis_client = get_redis_client()
+    
+    if not redis_client:
+        return {
+            "status": "not_connected",
+            "message": "Redis client not available - using in-memory cache",
+            "redis_available": False,
+            "redis_url": os.getenv("REDIS_URL", "not set")
+        }
+    
+    try:
+        # Test connection
+        ping_result = redis_client.ping()
+        
+        # Test set/get
+        test_key = "test:connection"
+        test_value = {"test": "data", "timestamp": "2025-11-21", "works": True}
+        
+        # Set value
+        cache_set(test_key, test_value, ttl=60)
+        
+        # Get value
+        cached = cache_get(test_key)
+        
+        # Test direct Redis operations
+        direct_set = redis_client.set("test:direct", "test_value", ex=60)
+        direct_get = redis_client.get("test:direct")
+        
+        return {
+            "status": "connected",
+            "message": "Redis is working!",
+            "redis_available": True,
+            "ping": "OK" if ping_result else "FAILED",
+            "set_get_test": "PASSED" if cached == test_value else "FAILED",
+            "cached_value": cached,
+            "direct_redis_test": "PASSED" if direct_get == "test_value" else "FAILED",
+            "redis_url": os.getenv("REDIS_URL", "not set")[:50] + "..." if os.getenv("REDIS_URL") else "not set"
+        }
+    except Exception as e:
+        logger.error(f"Redis test error: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "message": f"Redis error: {str(e)}",
+            "redis_available": True,
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "redis_url": os.getenv("REDIS_URL", "not set")[:50] + "..." if os.getenv("REDIS_URL") else "not set"
+        }
