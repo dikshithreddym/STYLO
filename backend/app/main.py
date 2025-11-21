@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import wardrobe_db as wardrobe
-from app.routers import suggestions
 from app.routers import suggestions_v2
 from app.database import engine, Base
 from sqlalchemy import create_engine
@@ -136,43 +135,8 @@ async def trigger_backfill():
             "traceback": traceback.format_exc()
         }
 
-# Admin endpoint to update category from shoes to footwear
-@app.post("/admin/update-category-to-footwear")
-async def update_category_to_footwear():
-    """Admin endpoint to update all 'shoes' category items to 'footwear'"""
-    import asyncio
-    try:
-        from app.database import SessionLocal
-        from app.database import WardrobeItem
-
-        def update_items():
-            db = SessionLocal()
-            updated_count = 0
-            items = db.query(WardrobeItem).filter(WardrobeItem.category == 'shoes').all()
-            for item in items:
-                item.category = 'footwear'
-                updated_count += 1
-            db.commit()
-            db.close()
-            return updated_count
-
-        updated_count = await asyncio.get_event_loop().run_in_executor(None, update_items)
-        return {
-            "status": "success",
-            "message": f"Updated {updated_count} items from 'shoes' to 'footwear'",
-            "updated_count": updated_count
-        }
-    except Exception as e:
-        import traceback
-        return {
-            "status": "error",
-            "message": str(e),
-            "traceback": traceback.format_exc()
-        }
-
 # Include routers
 app.include_router(wardrobe.router, prefix="/wardrobe", tags=["wardrobe"])
-app.include_router(suggestions.router, prefix="/suggestions", tags=["suggestions"])
 app.include_router(suggestions_v2.router)
 
 
