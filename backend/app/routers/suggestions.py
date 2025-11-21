@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.schemas import WardrobeItem, SuggestRequest, SuggestResponse, Outfit
 from app.database import get_db
 from app.database import WardrobeItem
-import os
 from sqlalchemy.exc import ProgrammingError, OperationalError
 from app.utils.gemini_suggest import suggest_outfit_with_gemini
 
