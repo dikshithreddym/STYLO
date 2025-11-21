@@ -213,6 +213,47 @@ async def root():
     }
 
 
+@app.get("/test-cache-debug")
+async def test_cache_debug():
+    """Debug cache behavior for suggestions"""
+    from app.utils.cache import get_redis_client, get_cached_suggestion, set_cached_suggestion, _generate_cache_key
+    import hashlib
+    import json
+    
+    redis_client = get_redis_client()
+    
+    test_query = "business meeting"
+    test_hash = "10"
+    
+    # Generate the same key that would be used
+    cache_key = _generate_cache_key("suggestion", test_query, test_hash)
+    
+    # Check what's in Redis
+    all_suggestion_keys = []
+    if redis_client:
+        try:
+            all_suggestion_keys = redis_client.keys("suggestion:*")
+        except Exception as e:
+            pass
+    
+    # Test set/get
+    test_result = {"intent": "business", "outfits": [{"test": "outfit"}]}
+    set_success = set_cached_suggestion(test_query, test_hash, test_result, ttl=60)
+    get_result = get_cached_suggestion(test_query, test_hash)
+    
+    return {
+        "cache_key_generated": cache_key,
+        "cache_key_short": cache_key[:50] + "..." if len(cache_key) > 50 else cache_key,
+        "set_success": set_success,
+        "get_result": get_result,
+        "get_matches_set": get_result == test_result,
+        "redis_keys_found": len(all_suggestion_keys),
+        "sample_keys": [k[:60] for k in list(all_suggestion_keys)[:10]],
+        "test_query": test_query,
+        "test_hash": test_hash
+    }
+
+
 @app.get("/test-redis")
 async def test_redis():
     """Test Redis connection and caching"""

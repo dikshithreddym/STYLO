@@ -94,7 +94,9 @@ def _generate_cache_key(prefix: str, *args, **kwargs) -> str:
     # Create a hash of all arguments
     key_data = json.dumps({"args": args, "kwargs": kwargs}, sort_keys=True)
     key_hash = hashlib.md5(key_data.encode()).hexdigest()
-    return f"{prefix}:{key_hash}"
+    full_key = f"{prefix}:{key_hash}"
+    logger.debug(f"Generated cache key: {full_key[:60]}... (from args: {args}, kwargs: {kwargs})")
+    return full_key
 
 
 def cache_get(key: str, cache_name: str = "default") -> Optional[Any]:
@@ -209,15 +211,27 @@ def cache_clear_pattern(pattern: str) -> int:
 def get_cached_suggestion(query: str, wardrobe_hash: str) -> Optional[Dict]:
     """Get cached outfit suggestion."""
     key = _generate_cache_key("suggestion", query, wardrobe_hash)
-    logger.debug(f"Getting cached suggestion with key: suggestion:{hashlib.md5(f'{query}:{wardrobe_hash}'.encode()).hexdigest()[:16]}")
-    return cache_get(key, cache_name="suggestions")
+    key_short = key[:50] + "..." if len(key) > 50 else key
+    logger.info(f"🔍 Cache GET - query: '{query}', hash: '{wardrobe_hash}', key: {key_short}")
+    result = cache_get(key, cache_name="suggestions")
+    if result:
+        logger.info(f"✅ Cache GET HIT for key: {key_short}")
+    else:
+        logger.info(f"❌ Cache GET MISS for key: {key_short}")
+    return result
 
 
 def set_cached_suggestion(query: str, wardrobe_hash: str, result: Dict, ttl: int = 300) -> bool:
     """Cache outfit suggestion."""
     key = _generate_cache_key("suggestion", query, wardrobe_hash)
-    logger.debug(f"Setting cached suggestion with key: suggestion:{hashlib.md5(f'{query}:{wardrobe_hash}'.encode()).hexdigest()[:16]}")
-    return cache_set(key, result, ttl=ttl, cache_name="suggestions")
+    key_short = key[:50] + "..." if len(key) > 50 else key
+    logger.info(f"💾 Cache SET - query: '{query}', hash: '{wardrobe_hash}', key: {key_short}, ttl: {ttl}s")
+    success = cache_set(key, result, ttl=ttl, cache_name="suggestions")
+    if success:
+        logger.info(f"✅ Cache SET SUCCESS for key: {key_short}")
+    else:
+        logger.warning(f"❌ Cache SET FAILED for key: {key_short}")
+    return success
 
 
 def get_cached_intent(query: str) -> Optional[Any]:
