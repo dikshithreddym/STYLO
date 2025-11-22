@@ -85,7 +85,22 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
 
-    # 1) Load wardrobe (with RAG filtering if enabled)
+    # IMPORTANT: Check cache FIRST, before any database operations
+    # This ensures cached requests return in < 0.1 seconds
+    import logging
+    logger = logging.getLogger(__name__)
+    query_normalized = text.lower().strip()
+    
+    logger.info(f"🔍 Checking cache FIRST for query: '{text}' (normalized: '{query_normalized}')")
+    cached_result = get_cached_suggestion(query_normalized, "fixed")
+    if cached_result:
+        logger.info(f"✅ CACHE HIT for query: '{text}' - returning immediately (skipped DB load)")
+        profiler.log_summary("[Suggest] [CACHED] ")
+        return V2SuggestResponse(**cached_result)
+    else:
+        logger.info(f"❌ CACHE MISS for query: '{text}' - will load wardrobe and compute")
+
+    # 1) Load wardrobe (with RAG filtering if enabled) - only if cache miss
     with profiler.measure("db_wardrobe_load"):
         if settings.RAG_ENABLED:
             try:
@@ -110,26 +125,8 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         profiler.log_summary("[Suggest] ")
         return V2SuggestResponse(intent="none", outfits=[])
     
-    # Generate cache key based on query text only (most reliable)
-    # Note: This means cache is shared across all users with same query, but that's fine for outfit suggestions
-    # The wardrobe items are already filtered by RAG, so same query = same relevant items
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    # Use query text as the cache key (normalized) - ignore wardrobe count for stability
-    query_normalized = text.lower().strip()
-    wardrobe_count = len(wardrobe)  # For logging only
-    
-    logger.info(f"🔍 Checking cache for query: '{text}' (normalized: '{query_normalized}'), wardrobe_count: {wardrobe_count}")
-    
-    # Use fixed hash to ensure same query always uses same cache key
-    cached_result = get_cached_suggestion(query_normalized, "fixed")
-    if cached_result:
-        logger.info(f"✅ CACHE HIT for query: '{text}' - returning cached result immediately")
-        profiler.log_summary("[Suggest] [CACHED] ")
-        return V2SuggestResponse(**cached_result)
-    else:
-        logger.info(f"❌ CACHE MISS for query: '{text}' - will compute and cache result")
+    wardrobe_count = len(wardrobe)
+    logger.info(f"Loaded {wardrobe_count} wardrobe items, proceeding with computation")
 
     # 2) Try Gemini API first
     gemini_api_key = os.getenv("GEMINI_API_KEY")
