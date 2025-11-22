@@ -110,30 +110,26 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
         profiler.log_summary("[Suggest] ")
         return V2SuggestResponse(intent="none", outfits=[])
     
-    # Generate cache key based on query text only (simpler, more reliable)
+    # Generate cache key based on query text only (most reliable)
     # Note: This means cache is shared across all users with same query, but that's fine for outfit suggestions
     # The wardrobe items are already filtered by RAG, so same query = same relevant items
     import logging
     logger = logging.getLogger(__name__)
     
-    # Use query text as the primary cache key (normalized)
+    # Use query text as the cache key (normalized) - ignore wardrobe count for stability
     query_normalized = text.lower().strip()
+    wardrobe_count = len(wardrobe)  # For logging only
     
-    # Also include wardrobe count to handle cases where wardrobe size changes significantly
-    wardrobe_count = len(wardrobe)
-    wardrobe_hash = hashlib.md5(
-        json.dumps({"query": query_normalized, "count": wardrobe_count}, sort_keys=True).encode()
-    ).hexdigest()
+    logger.info(f"🔍 Checking cache for query: '{text}' (normalized: '{query_normalized}'), wardrobe_count: {wardrobe_count}")
     
-    logger.info(f"🔍 Checking cache for query: '{text}' (normalized: '{query_normalized}'), wardrobe_count: {wardrobe_count}, hash: {wardrobe_hash[:8]}")
-    
-    cached_result = get_cached_suggestion(query_normalized, str(wardrobe_count))
+    # Use fixed hash to ensure same query always uses same cache key
+    cached_result = get_cached_suggestion(query_normalized, "fixed")
     if cached_result:
-        logger.info(f"✅ CACHE HIT for query: '{text}', hash: {wardrobe_hash[:8]}")
+        logger.info(f"✅ CACHE HIT for query: '{text}' - returning cached result immediately")
         profiler.log_summary("[Suggest] [CACHED] ")
         return V2SuggestResponse(**cached_result)
     else:
-        logger.info(f"❌ CACHE MISS for query: '{text}', hash: {wardrobe_hash[:8]} - will compute and cache result")
+        logger.info(f"❌ CACHE MISS for query: '{text}' - will compute and cache result")
 
     # 2) Try Gemini API first
     gemini_api_key = os.getenv("GEMINI_API_KEY")
@@ -161,9 +157,9 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                     )
                 if v2_outfits:
                     result = V2SuggestResponse(intent=intent, outfits=v2_outfits)
-                    # Cache the result (5 minutes TTL) - use normalized query
-                    cache_success = set_cached_suggestion(query_normalized, str(wardrobe_count), result.dict(), ttl=300)
-                    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}' (hash: {wardrobe_hash[:8]})")
+                    # Cache the result (5 minutes TTL) - use fixed hash for consistency
+                    cache_success = set_cached_suggestion(query_normalized, "fixed", result.dict(), ttl=300)
+                    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}'")
                     profiler.log_summary("[Suggest] ")
                     return result
         except Exception as e:
@@ -199,7 +195,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     
     profiler.log_summary("[Suggest] ")
     result = V2SuggestResponse(intent=intent, outfits=v2_outfits) if v2_outfits else V2SuggestResponse(intent=intent, outfits=[])
-    # Cache the result (5 minutes TTL) - use normalized query
-    cache_success = set_cached_suggestion(query_normalized, str(wardrobe_count), result.dict(), ttl=300)
-    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}' (hash: {wardrobe_hash[:8]})")
+    # Cache the result (5 minutes TTL) - use fixed hash for consistency
+    cache_success = set_cached_suggestion(query_normalized, "fixed", result.dict(), ttl=300)
+    logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}'")
     return result
