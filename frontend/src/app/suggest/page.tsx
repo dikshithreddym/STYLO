@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Image from 'next/image'
@@ -8,19 +8,77 @@ import { suggestionsAPI, V2SuggestResponse, V2Outfit, V2Item } from '@/lib/api'
 import { saveSuggestHistory } from '@/lib/storage'
 import { getColorHex } from '@/lib/colors'
 
+const SUGGEST_QUERY_KEY = 'stylo.suggest.query'
+const SUGGEST_RESULT_KEY = 'stylo.suggest.result'
+
+// Helper functions to persist query and result
+function saveQueryToStorage(query: string) {
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.setItem(SUGGEST_QUERY_KEY, query)
+    } catch {}
+  }
+}
+
+function loadQueryFromStorage(): string {
+  if (typeof window !== 'undefined') {
+    try {
+      return sessionStorage.getItem(SUGGEST_QUERY_KEY) || 'Professional business meeting at a tech startup'
+    } catch {}
+  }
+  return 'Professional business meeting at a tech startup'
+}
+
+function saveResultToStorage(result: V2SuggestResponse | null) {
+  if (typeof window !== 'undefined') {
+    try {
+      if (result) {
+        sessionStorage.setItem(SUGGEST_RESULT_KEY, JSON.stringify(result))
+      } else {
+        sessionStorage.removeItem(SUGGEST_RESULT_KEY)
+      }
+    } catch {}
+  }
+}
+
+function loadResultFromStorage(): V2SuggestResponse | null {
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = sessionStorage.getItem(SUGGEST_RESULT_KEY)
+      return raw ? JSON.parse(raw) : null
+    } catch {}
+  }
+  return null
+}
+
 export default function SuggestPage() {
-  const [text, setText] = useState('Professional business meeting at a tech startup')
+  const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<V2SuggestResponse | null>(null)
+
+  // Load persisted query and result on mount
+  useEffect(() => {
+    const savedQuery = loadQueryFromStorage()
+    const savedResult = loadResultFromStorage()
+    setText(savedQuery)
+    if (savedResult) {
+      setResult(savedResult)
+      setError(null) // Clear any previous error if we have a saved result
+    }
+  }, [])
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       setLoading(true)
       setError(null)
+      // Save query before submitting
+      saveQueryToStorage(text)
       const res = await suggestionsAPI.suggestV2(text, 3)
       setResult(res)
+      // Save result to storage
+      saveResultToStorage(res)
       // Save to history - collect all item IDs from first outfit
       if (res.outfits.length > 0) {
         const firstOutfit = res.outfits[0]
@@ -39,10 +97,21 @@ export default function SuggestPage() {
       const errorMessage = err?.response?.data?.detail || 'Failed to get suggestion. Ensure backend is running.'
       setError(errorMessage)
       setResult(null)
+      saveResultToStorage(null)
     } finally {
       setLoading(false)
     }
   }
+
+  // Save query to storage whenever it changes (debounced)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (text) {
+        saveQueryToStorage(text)
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [text])
 
   const renderOutfitItem = (item: V2Item | null, label: string) => {
     if (!item) return null

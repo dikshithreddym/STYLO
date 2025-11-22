@@ -26,22 +26,23 @@ _in_memory_caches: Dict[str, TTLCache] = {}
 
 # Redis client (initialized lazily)
 _redis_client: Optional[Any] = None
+_redis_connection_attempted = False  # Track if we've already tried to connect
 
 
 def get_redis_client():
     """Get or create Redis client with connection pooling."""
-    global _redis_client
+    global _redis_client, _redis_connection_attempted
     if not REDIS_AVAILABLE:
         logger.debug("Redis library not available")
         return None
     
-    if _redis_client is None:
+    if _redis_client is None and not _redis_connection_attempted:
+        _redis_connection_attempted = True
         try:
             # Check for REDIS_URL first (Render/cloud provider format)
             redis_url = os.getenv('REDIS_URL')
             if redis_url:
-                logger.info(f"Attempting Redis connection via REDIS_URL: {redis_url[:50]}...")
-                # Parse Redis URL format: redis://host:port or redis://:password@host:port
+                logger.debug(f"Attempting Redis connection via REDIS_URL")
                 _redis_client = redis.from_url(
                     redis_url,
                     decode_responses=True,
@@ -52,7 +53,7 @@ def get_redis_client():
                 )
                 # Test connection
                 ping_result = _redis_client.ping()
-                logger.info(f"✅ Redis connected via REDIS_URL (ping: {ping_result})")
+                logger.info(f"✅ Redis connected via REDIS_URL")
             else:
                 # Fallback to individual environment variables
                 redis_host = os.getenv('REDIS_HOST', 'localhost')
@@ -60,7 +61,7 @@ def get_redis_client():
                 redis_db = int(os.getenv('REDIS_DB', '0'))
                 redis_password = os.getenv('REDIS_PASSWORD', None)
                 
-                logger.info(f"Attempting Redis connection: {redis_host}:{redis_port}/{redis_db}")
+                logger.debug(f"Attempting Redis connection: {redis_host}:{redis_port}/{redis_db}")
                 _redis_client = redis.Redis(
                     host=redis_host,
                     port=redis_port,
@@ -74,9 +75,11 @@ def get_redis_client():
                 )
                 # Test connection
                 ping_result = _redis_client.ping()
-                logger.info(f"✅ Redis connected: {redis_host}:{redis_port}/{redis_db} (ping: {ping_result})")
+                logger.info(f"✅ Redis connected: {redis_host}:{redis_port}/{redis_db}")
         except Exception as e:
-            logger.warning(f"❌ Redis connection failed: {e}. Using in-memory cache only.", exc_info=True)
+            # Only log warning once, without full traceback
+            error_msg = str(e).split('\n')[0]  # Get first line of error message
+            logger.warning(f"⚠️  Redis unavailable ({error_msg}). Using in-memory cache only.")
             _redis_client = None
     
     return _redis_client
