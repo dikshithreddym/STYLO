@@ -72,7 +72,7 @@ def _model_to_dict(it: WardrobeItem) -> dict:
         "color": getattr(it, "color", None),
         "image_url": getattr(it, "image_url", None),
         "description": getattr(it, "image_description", None),
-        "embedding": it.embedding,  # Include stored embedding if available
+        # Embedding removed - not needed by frontend, saves ~1.5KB per item
     }
 
 

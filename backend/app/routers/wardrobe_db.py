@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
 from app.schemas import WardrobeItem as WardrobeItemSchema, WardrobeItemCreate
 from app.database import WardrobeItem as WardrobeItemModel
@@ -32,14 +33,20 @@ async def get_wardrobe_items(
     Get wardrobe items with pagination.
     Filtering and sorting are handled client-side for better performance.
     """
-    # Simple query - no filtering or sorting (handled on frontend)
-    query = db.query(WardrobeItemModel)
+    # OPTIMIZATION: Use window function to get count and items in a single query
+    # This is more efficient than separate count() and select queries
+    query = db.query(
+        WardrobeItemModel,
+        func.count().over().label('total')
+    )
     
-    # Get total count
-    total = query.count()
+    # Apply pagination
+    results = query.offset((page - 1) * page_size).limit(page_size).all()
     
-    # Pagination
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    # Extract items and total count from results
+    # Results are tuples: (WardrobeItemModel, total_count)
+    items = [row[0] for row in results]
+    total = results[0][1] if results else 0
 
     # Set total count header
     response.headers["X-Total-Count"] = str(total)

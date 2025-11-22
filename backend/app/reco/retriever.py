@@ -65,29 +65,44 @@ def retrieve_relevant_items(
     try:
         profiler = get_profiler()
         
-        # Get all wardrobe items from database
-        with profiler.measure("db_query_all_items"):
-            all_items = db.query(WardrobeItem).all()
+        # OPTIMIZATION: First get count to determine if we need RAG filtering
+        # This avoids loading all items into memory if wardrobe is small
+        with profiler.measure("db_query_count"):
+            total_count = db.query(WardrobeItem).count()
         
-        if not all_items:
+        if total_count == 0:
             logger.info("No wardrobe items found in database")
             return []
         
         # Calculate adaptive thresholds based on data volume if not provided
         if limit_per_category is None or min_items_per_category is None or min_total_items is None:
-            adaptive_thresholds = settings.get_adaptive_rag_thresholds(len(all_items))
+            adaptive_thresholds = settings.get_adaptive_rag_thresholds(total_count)
             limit_per_category = limit_per_category or adaptive_thresholds["limit_per_category"]
             min_items_per_category = min_items_per_category or adaptive_thresholds["min_items_per_category"]
             min_total_items = min_total_items or adaptive_thresholds["min_total_items"]
-            logger.debug(f"Adaptive RAG thresholds for {len(all_items)} items: "
+            logger.debug(f"Adaptive RAG thresholds for {total_count} items: "
                         f"limit_per_category={limit_per_category}, "
                         f"min_items_per_category={min_items_per_category}, "
                         f"min_total_items={min_total_items}")
         
         # If wardrobe is small, return all items (no need for filtering)
-        if len(all_items) < min_total_items:
-            logger.info(f"Wardrobe size ({len(all_items)}) is below minimum ({min_total_items}), returning all items")
-            return all_items
+        if total_count < min_total_items:
+            logger.info(f"Wardrobe size ({total_count}) is below minimum ({min_total_items}), returning all items")
+            with profiler.measure("db_query_all_items"):
+                return db.query(WardrobeItem).all()
+        
+        # OPTIMIZATION: Only query items with embeddings first (RAG requires embeddings)
+        # This reduces memory usage and speeds up processing for large wardrobes
+        with profiler.measure("db_query_items_with_embeddings"):
+            all_items = db.query(WardrobeItem).filter(
+                WardrobeItem.embedding.isnot(None)
+            ).all()
+        
+        # If no items have embeddings, fallback to all items
+        if not all_items:
+            logger.warning("No items with embeddings found, falling back to all items")
+            with profiler.measure("db_query_all_items"):
+                all_items = db.query(WardrobeItem).all()
         
         # Initialize embedder
         emb = Embedder.instance()
