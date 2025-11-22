@@ -4,24 +4,22 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import Image from 'next/image'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-import { wardrobeAPI } from '@/lib/api'
+import { wardrobeAPI, WardrobeItem } from '@/lib/api'
 import { getFavorites, toggleFavorite } from '@/lib/storage'
 import { getColorHex } from '@/lib/colors'
 import AddItemModal from '@/components/modals/AddItemModal'
 import HealthStatus from '@/components/system/HealthStatus'
-
-interface WardrobeItem {
-  id: number
-  type: string
-  color: string
-  image_url: string | null
-  category?: 'top' | 'bottom' | 'footwear' | 'layer' | 'one-piece' | 'accessories'
-}
+import { wardrobeCache, filterStateCache } from '@/lib/wardrobeCache'
 
 export default function WardrobePage() {
-  const [items, setItems] = useState<WardrobeItem[]>([])
+  // All wardrobe items (loaded once, cached)
+  const [allItems, setAllItems] = useState<WardrobeItem[]>([])
+  // Filtered and paginated items (computed client-side)
+  const [displayedItems, setDisplayedItems] = useState<WardrobeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Filter states
   const [q, setQ] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [colorFilter, setColorFilter] = useState('')
@@ -29,19 +27,55 @@ export default function WardrobePage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(12)
-  const [total, setTotal] = useState(0)
+  
   const [favorites, setFavorites] = useState<Set<number>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const isFirstMount = useRef(true)
 
-  const fetchWardrobeItems = async (params?: { q?: string; type?: string; color?: string; category?: string; sort?: typeof sort; page?: number; page_size?: number }) => {
+  // Load all wardrobe items once (with caching)
+  const fetchAllWardrobeItems = async (forceRefresh = false) => {
     try {
       setLoading(true)
       setError(null)
-      const { items, total } = await wardrobeAPI.getAllPaged(params)
-      setItems(items)
-      setTotal(total)
+
+      // Check cache first (unless force refresh)
+      if (!forceRefresh) {
+        const cached = wardrobeCache.getCached()
+        if (cached) {
+          setAllItems(cached.items)
+          setLoading(false)
+          return
+        }
+      }
+
+      // Fetch all items from backend in batches (max 100 per page)
+      const allItems: WardrobeItem[] = []
+      let page = 1
+      const pageSize = 100
+      let total = 0
+      let hasMore = true
+
+      while (hasMore) {
+        const { items, total: totalCount } = await wardrobeAPI.getAllPaged({
+          page,
+          page_size: pageSize,
+        })
+        
+        allItems.push(...items)
+        total = totalCount
+        
+        // If we got fewer items than page size, we've reached the end
+        if (items.length < pageSize || allItems.length >= total) {
+          hasMore = false
+        } else {
+          page++
+        }
+      }
+
+      // Cache the results
+      wardrobeCache.setCached(allItems, total)
+      setAllItems(allItems)
     } catch (err) {
       setError('Failed to load wardrobe items. Make sure the backend is running.')
       console.error('Error fetching wardrobe:', err)
@@ -50,50 +84,85 @@ export default function WardrobePage() {
     }
   }
 
-  // Load wardrobe items on mount and when filters change
+  // Load wardrobe items on mount
   useEffect(() => {
-    const params = {
-      q: q || undefined,
-      type: typeFilter || undefined,
-      color: colorFilter || undefined,
-      category: categoryFilter || undefined,
-      sort,
-      page,
-      page_size: pageSize,
+    // Restore filter state from cache
+    const savedState = filterStateCache.get()
+    if (savedState) {
+      if (savedState.q) setQ(savedState.q)
+      if (savedState.type) setTypeFilter(savedState.type)
+      if (savedState.color) setColorFilter(savedState.color)
+      if (savedState.category) setCategoryFilter(savedState.category)
+      if (savedState.sort) setSort(savedState.sort as any)
+      if (savedState.page) setPage(savedState.page)
+      if (savedState.pageSize) setPageSize(savedState.pageSize)
     }
 
-    // On first mount, load immediately (no debounce)
-    if (isFirstMount.current) {
-      isFirstMount.current = false
-      fetchWardrobeItems(params)
+    fetchAllWardrobeItems()
+    setFavorites(getFavorites())
+  }, [])
+
+  // Client-side filtering and sorting (no API calls)
+  useEffect(() => {
+    if (allItems.length === 0) {
+      setDisplayedItems([])
       return
     }
 
-    // On subsequent filter changes, debounce the request
-    const t = setTimeout(() => {
-      fetchWardrobeItems(params)
-    }, 300)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, typeFilter, colorFilter, categoryFilter, sort, page, pageSize])
+    // Filter and sort client-side
+    const filtered = wardrobeCache.filterAndSort(allItems, {
+      q,
+      type: typeFilter,
+      color: colorFilter,
+      category: categoryFilter,
+      sort,
+    })
 
-  const uniqueTypes = useMemo(() => Array.from(new Set(items.map(i => i.type))).sort(), [items])
-  const uniqueColors = useMemo(() => Array.from(new Set(items.map(i => i.color))).sort(), [items])
+    // Paginate
+    const paginated = wardrobeCache.paginate(filtered, page, pageSize)
+
+    setDisplayedItems(paginated)
+
+    // Save filter state
+    filterStateCache.save({
+      q,
+      type: typeFilter,
+      color: colorFilter,
+      category: categoryFilter,
+      sort,
+      page,
+      pageSize,
+    })
+  }, [allItems, q, typeFilter, colorFilter, categoryFilter, sort, page, pageSize])
+
+  // Calculate total for pagination
+  const totalFiltered = useMemo(() => {
+    if (allItems.length === 0) return 0
+    const filtered = wardrobeCache.filterAndSort(allItems, {
+      q,
+      type: typeFilter,
+      color: colorFilter,
+      category: categoryFilter,
+      sort,
+    })
+    return filtered.length
+  }, [allItems, q, typeFilter, colorFilter, categoryFilter, sort])
+
+  // Get unique types and colors from all items (not just displayed)
+  const uniqueTypes = useMemo(() => Array.from(new Set(allItems.map(i => i.type))).sort(), [allItems])
+  const uniqueColors = useMemo(() => Array.from(new Set(allItems.map(i => i.color))).sort(), [allItems])
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this item?')) return
     try {
       setDeletingId(id)
       await wardrobeAPI.delete(id)
-      await fetchWardrobeItems({
-        q: q || undefined,
-        type: typeFilter || undefined,
-        color: colorFilter || undefined,
-        category: categoryFilter || undefined,
-        sort,
-        page,
-        page_size: pageSize,
-      })
+      
+      // Remove from local state
+      setAllItems((prev) => prev.filter((item) => item.id !== id))
+      
+      // Clear cache to force refresh on next load
+      wardrobeCache.clear()
     } catch (err) {
       console.error(err)
       alert('Failed to delete item')
@@ -128,7 +197,7 @@ export default function WardrobePage() {
               <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">Error Loading Wardrobe</h2>
               <p className="text-sm sm:text-base text-gray-600 mb-4 break-words">{error}</p>
               <button
-                onClick={fetchWardrobeItems}
+                onClick={() => fetchAllWardrobeItems(true)}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm sm:text-base"
               >
                 Try Again
@@ -160,7 +229,7 @@ export default function WardrobePage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-500 mb-1 font-medium">Total Items</p>
-                <p className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent">{total}</p>
+                <p className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary-600 to-primary-500 bg-clip-text text-transparent">{allItems.length}</p>
               </div>
               <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg">
                 <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -174,7 +243,7 @@ export default function WardrobePage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs sm:text-sm text-gray-500 mb-1 font-medium">Categories</p>
-                <p className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">{new Set(items.map(i => i.category)).size}</p>
+                <p className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent">{new Set(allItems.map(i => i.category)).size}</p>
               </div>
               <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg">
                 <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -205,15 +274,27 @@ export default function WardrobePage() {
             <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-1">My Wardrobe</h2>
             <p className="text-gray-600 text-xs sm:text-sm md:text-base">Browse and manage your clothing collection</p>
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center justify-center px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium text-sm sm:text-base whitespace-nowrap w-full sm:w-auto"
-          >
-            <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Item
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => fetchAllWardrobeItems(true)}
+              disabled={loading}
+              className="inline-flex items-center justify-center px-3 sm:px-4 py-2 sm:py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg sm:rounded-xl shadow-sm hover:shadow transition-all duration-200 font-medium text-xs sm:text-sm whitespace-nowrap"
+              title="Refresh wardrobe"
+            >
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center justify-center px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium text-sm sm:text-base whitespace-nowrap w-full sm:w-auto"
+            >
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Item
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -223,7 +304,7 @@ export default function WardrobePage() {
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Search</label>
               <input
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => { setQ(e.target.value); setPage(1) }}
                 placeholder="Search by type or color"
                 className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
               />
@@ -232,7 +313,7 @@ export default function WardrobePage() {
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Type</label>
               <select
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
+                onChange={(e) => { setTypeFilter(e.target.value); setPage(1) }}
                 className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
               >
                 <option value="">All</option>
@@ -245,7 +326,7 @@ export default function WardrobePage() {
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Color</label>
               <select
                 value={colorFilter}
-                onChange={(e) => setColorFilter(e.target.value)}
+                onChange={(e) => { setColorFilter(e.target.value); setPage(1) }}
                 className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
               >
                 <option value="">All</option>
@@ -271,7 +352,7 @@ export default function WardrobePage() {
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Sort</label>
               <select
                 value={sort}
-                onChange={(e) => setSort(e.target.value as any)}
+                onChange={(e) => { setSort(e.target.value as any); setPage(1) }}
                 className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
               >
                 <option value="id">ID (asc)</option>
@@ -285,7 +366,9 @@ export default function WardrobePage() {
           </div>
           {/* Pagination controls */}
           <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-            <div className="text-xs sm:text-sm text-gray-600">Total: {total}</div>
+            <div className="text-xs sm:text-sm text-gray-600">
+              Showing {displayedItems.length} of {totalFiltered} items
+            </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -294,9 +377,9 @@ export default function WardrobePage() {
               >Prev</button>
               <span className="text-xs sm:text-sm text-gray-700 font-medium px-2">Page {page}</span>
               <button
-                onClick={() => setPage((p) => (p * pageSize < total ? p + 1 : p))}
+                onClick={() => setPage((p) => (p * pageSize < totalFiltered ? p + 1 : p))}
                 className="px-2.5 sm:px-3 py-1.5 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={page * pageSize >= total}
+                disabled={page * pageSize >= totalFiltered}
               >Next</button>
               <select
                 value={pageSize}
@@ -310,7 +393,7 @@ export default function WardrobePage() {
         </div>
 
         {/* Wardrobe Grid */}
-        {items.length === 0 ? (
+        {displayedItems.length === 0 ? (
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 md:p-12 text-center">
             <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -320,7 +403,7 @@ export default function WardrobePage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4 lg:gap-6">
-            {items.map((item) => (
+            {displayedItems.map((item) => (
               <div key={item.id} className="group bg-white rounded-lg sm:rounded-xl md:rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
                 {/* Image */}
                 <div className="relative h-40 sm:h-48 md:h-56 lg:h-64 xl:h-72 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
@@ -396,16 +479,15 @@ export default function WardrobePage() {
       {showAddModal && (
         <AddItemModal
           onClose={() => setShowAddModal(false)}
-          onSuccess={() => {
-            fetchWardrobeItems({
-              q: q || undefined,
-              type: typeFilter || undefined,
-              color: colorFilter || undefined,
-              category: categoryFilter || undefined,
-              sort,
-              page,
-              page_size: pageSize,
-            })
+          onSuccess={(newItem) => {
+            // Add new item to local state
+            setAllItems((prev) => [newItem, ...prev])
+            
+            // Clear cache to ensure fresh data
+            wardrobeCache.clear()
+            
+            // Reset to first page to show new item
+            setPage(1)
           }}
         />
       )}

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { wardrobeAPI, WardrobeItem } from '@/lib/api'
+import { compressImage, needsCompression } from '@/lib/imageCompression'
 
 interface AddItemModalProps {
   onClose: () => void
@@ -24,19 +25,46 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
   const [cameraActive, setCameraActive] = useState(false)
   const [stream, setStream] = useState<MediaStream | null>(null)
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       if (!file.type.startsWith('image/')) {
         setError('Please select an image file')
         return
       }
+      
       setImageFile(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string)
+      
+      // Compress image if needed
+      try {
+        const shouldCompress = needsCompression(file, 2) // Compress if > 2MB
+        if (shouldCompress) {
+          setLoading(true)
+          const compressedDataUrl = await compressImage(file, {
+            maxWidth: 1920,
+            maxHeight: 1920,
+            quality: 0.85,
+            format: 'webp',
+          })
+          setImagePreview(compressedDataUrl)
+          setLoading(false)
+        } else {
+          // Use original if no compression needed
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            setImagePreview(reader.result as string)
+          }
+          reader.readAsDataURL(file)
+        }
+      } catch (err) {
+        console.error('Image compression failed, using original:', err)
+        // Fallback to original
+        const reader = new FileReader()
+        reader.onloadend = () => {
+          setImagePreview(reader.result as string)
+        }
+        reader.readAsDataURL(file)
       }
-      reader.readAsDataURL(file)
     }
   }
 
@@ -83,7 +111,7 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
     setCameraActive(false)
   }
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current
       const canvas = canvasRef.current
@@ -92,14 +120,38 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
       const ctx = canvas.getContext('2d')
       ctx?.drawImage(video, 0, 0)
       
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' })
-          setImageFile(file)
-          setImagePreview(canvas.toDataURL('image/jpeg'))
-          stopCamera()
-        }
-      }, 'image/jpeg', 0.9)
+      // Get initial data URL
+      const initialDataUrl = canvas.toDataURL('image/jpeg', 0.9)
+      
+      // Compress the captured image
+      try {
+        const compressedDataUrl = await compressImage(initialDataUrl, {
+          maxWidth: 1920,
+          maxHeight: 1920,
+          quality: 0.85,
+          format: 'webp',
+        })
+        
+        // Create file from compressed data
+        const response = await fetch(compressedDataUrl)
+        const blob = await response.blob()
+        const file = new File([blob], 'camera-photo.webp', { type: 'image/webp' })
+        
+        setImageFile(file)
+        setImagePreview(compressedDataUrl)
+        stopCamera()
+      } catch (err) {
+        console.error('Image compression failed, using original:', err)
+        // Fallback to original
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' })
+            setImageFile(file)
+            setImagePreview(initialDataUrl)
+            stopCamera()
+          }
+        }, 'image/jpeg', 0.9)
+      }
     }
   }
 
@@ -114,10 +166,21 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
       setLoading(true)
       setError(null)
       
-      // Convert image to base64 data URL if provided
+      // Use compressed image preview (already compressed in handleFileSelect/capturePhoto)
       let imageData: string | null = null
-      if (imageFile) {
-        imageData = imagePreview
+      if (imagePreview) {
+        // Ensure image is compressed before upload
+        if (imageFile && needsCompression(imageFile, 2)) {
+          // Re-compress if needed (should already be compressed, but double-check)
+          imageData = await compressImage(imageFile, {
+            maxWidth: 1920,
+            maxHeight: 1920,
+            quality: 0.85,
+            format: 'webp',
+          })
+        } else {
+          imageData = imagePreview
+        }
       }
 
       const newItem = await wardrobeAPI.create({

@@ -249,18 +249,6 @@ def set_cached_intent(query: str, result: Any, ttl: int = 3600) -> bool:
     return cache_set(key, result, ttl=ttl, cache_name="intents")
 
 
-def get_cached_wardrobe_list(cache_key: str) -> Optional[List[Dict]]:
-    """Get cached wardrobe list."""
-    key = f"wardrobe_list:{cache_key}"
-    return cache_get(key, cache_name="wardrobe")
-
-
-def set_cached_wardrobe_list(cache_key: str, items: List[Dict], ttl: int = 60) -> bool:
-    """Cache wardrobe list."""
-    key = f"wardrobe_list:{cache_key}"
-    return cache_set(key, items, ttl=ttl, cache_name="wardrobe")
-
-
 def get_cached_embedding(item_id: int) -> Optional[List[float]]:
     """Get cached embedding for an item."""
     key = f"embedding:{item_id}"

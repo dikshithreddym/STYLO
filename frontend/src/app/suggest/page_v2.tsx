@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { suggestionsAPI, V2SuggestResponse, V2Outfit, V2Item } from '@/lib/api'
 import { saveSuggestHistory } from '@/lib/storage'
 import { getColorHex } from '@/lib/colors'
+import { suggestionCache } from '@/lib/wardrobeCache'
 
 export default function SuggestPage() {
   const [text, setText] = useState('Professional business meeting at a tech startup')
@@ -19,7 +20,34 @@ export default function SuggestPage() {
     try {
       setLoading(true)
       setError(null)
+      
+      // Check cache first
+      const cachedResult = suggestionCache.getCached(text)
+      if (cachedResult) {
+        setResult(cachedResult)
+        setLoading(false)
+        
+        // Save to history
+        if (cachedResult.outfits.length > 0) {
+          const firstOutfit = cachedResult.outfits[0]
+          const ids = [
+            firstOutfit.top?.id,
+            firstOutfit.bottom?.id,
+            firstOutfit.footwear?.id,
+            firstOutfit.outerwear?.id,
+            firstOutfit.accessories?.id,
+          ].filter((id): id is number => id !== undefined && id !== null)
+          saveSuggestHistory({ id: Math.random().toString(36).slice(2), text, timestamp: Date.now(), outfitItemIds: ids })
+        }
+        return
+      }
+      
+      // Fetch from API if not cached
       const res = await suggestionsAPI.suggestV2(text, 3)
+      
+      // Cache the result
+      suggestionCache.setCached(text, res)
+      
       setResult(res)
       // Save to history - collect all item IDs from first outfit
       if (res.outfits.length > 0) {
