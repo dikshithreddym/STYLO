@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import Image from 'next/image'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -33,10 +33,7 @@ export default function WardrobePage() {
   const [favorites, setFavorites] = useState<Set<number>>(new Set())
   const [showAddModal, setShowAddModal] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
-
-  useEffect(() => {
-    fetchWardrobeItems()
-  }, [])
+  const isFirstMount = useRef(true)
 
   const fetchWardrobeItems = async (params?: { q?: string; type?: string; color?: string; category?: string; sort?: typeof sort; page?: number; page_size?: number }) => {
     try {
@@ -53,18 +50,28 @@ export default function WardrobePage() {
     }
   }
 
-  // Debounced refetch on filter changes
+  // Load wardrobe items on mount and when filters change
   useEffect(() => {
+    const params = {
+      q: q || undefined,
+      type: typeFilter || undefined,
+      color: colorFilter || undefined,
+      category: categoryFilter || undefined,
+      sort,
+      page,
+      page_size: pageSize,
+    }
+
+    // On first mount, load immediately (no debounce)
+    if (isFirstMount.current) {
+      isFirstMount.current = false
+      fetchWardrobeItems(params)
+      return
+    }
+
+    // On subsequent filter changes, debounce the request
     const t = setTimeout(() => {
-      fetchWardrobeItems({
-        q: q || undefined,
-        type: typeFilter || undefined,
-        color: colorFilter || undefined,
-        category: categoryFilter || undefined,
-        sort,
-        page,
-        page_size: pageSize,
-      })
+      fetchWardrobeItems(params)
     }, 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
