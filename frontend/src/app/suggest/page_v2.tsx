@@ -60,7 +60,7 @@ export default function SuggestPage() {
                     firstOutfit.outerwear?.id,
                     firstOutfit.accessories?.id,
                   ].filter((id): id is number => id !== undefined && id !== null)
-                  saveSuggestHistory({ id: Math.random().toString(36).slice(2), query, timestamp: Date.now(), outfitItemIds: ids })
+                  saveSuggestHistory({ id: Math.random().toString(36).slice(2), text: query, timestamp: Date.now(), outfitItemIds: ids })
                 }
               } catch (err: any) {
                 // If error, show it
