@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Image from 'next/image'
@@ -9,23 +9,124 @@ import { saveSuggestHistory } from '@/lib/storage'
 import { getColorHex } from '@/lib/colors'
 import { suggestionCache } from '@/lib/wardrobeCache'
 
+const PENDING_REQUEST_KEY = 'stylo.pending_suggestion_request'
+
 export default function SuggestPage() {
   const [text, setText] = useState('Professional business meeting at a tech startup')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<V2SuggestResponse | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Check for pending request on mount and restore state
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const checkPendingRequest = async () => {
+      try {
+        const pendingRequest = sessionStorage.getItem(PENDING_REQUEST_KEY)
+        if (pendingRequest) {
+          const { query, timestamp } = JSON.parse(pendingRequest)
+          // Check if request is still recent (within 3 minutes)
+          const age = Date.now() - timestamp
+          if (age < 180000) { // 3 minutes
+            setText(query)
+            
+            // First check if result is already in cache (request might have completed)
+            const cachedResult = suggestionCache.getCached(query)
+            if (cachedResult) {
+              // Request completed while away, show result immediately
+              setResult(cachedResult)
+              setLoading(false)
+              sessionStorage.removeItem(PENDING_REQUEST_KEY)
+            } else {
+              // Request still pending, show loading state and retry
+              // (cache will prevent duplicate work if first request completes)
+              setLoading(true)
+              
+              // Retry the request (cache check will prevent duplicate if already completed)
+              try {
+                const res = await suggestionsAPI.suggestV2(query, 3)
+                suggestionCache.setCached(query, res)
+                setResult(res)
+                
+                // Save to history
+                if (res.outfits.length > 0) {
+                  const firstOutfit = res.outfits[0]
+                  const ids = [
+                    firstOutfit.top?.id,
+                    firstOutfit.bottom?.id,
+                    firstOutfit.footwear?.id,
+                    firstOutfit.outerwear?.id,
+                    firstOutfit.accessories?.id,
+                  ].filter((id): id is number => id !== undefined && id !== null)
+                  saveSuggestHistory({ id: Math.random().toString(36).slice(2), query, timestamp: Date.now(), outfitItemIds: ids })
+                }
+              } catch (err: any) {
+                // If error, show it
+                const errorMessage = err?.response?.data?.detail || 'Failed to get suggestion. Ensure backend is running.'
+                setError(errorMessage)
+              } finally {
+                setLoading(false)
+                sessionStorage.removeItem(PENDING_REQUEST_KEY)
+              }
+            }
+          } else {
+            // Request is too old, clear it
+            sessionStorage.removeItem(PENDING_REQUEST_KEY)
+          }
+        }
+      } catch (error) {
+        console.error('Error checking pending request:', error)
+      }
+    }
+
+    checkPendingRequest()
+
+    // Cleanup on unmount
+    return () => {
+      // Cancel any pending request when component unmounts
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        abortControllerRef.current = null
+      }
+    }
+  }, [])
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // Create new AbortController for this request
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+    
     try {
       setLoading(true)
       setError(null)
+      
+      // Store pending request in sessionStorage
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(PENDING_REQUEST_KEY, JSON.stringify({
+          query: text,
+          timestamp: Date.now()
+        }))
+      }
       
       // Check cache first
       const cachedResult = suggestionCache.getCached(text)
       if (cachedResult) {
         setResult(cachedResult)
         setLoading(false)
+        
+        // Clear pending request
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(PENDING_REQUEST_KEY)
+        }
         
         // Save to history
         if (cachedResult.outfits.length > 0) {
@@ -42,8 +143,13 @@ export default function SuggestPage() {
         return
       }
       
-      // Fetch from API if not cached
-      const res = await suggestionsAPI.suggestV2(text, 3)
+      // Fetch from API if not cached (with abort signal)
+      const res = await suggestionsAPI.suggestV2(text, 3, abortController.signal)
+      
+      // Check if request was aborted
+      if (abortController.signal.aborted) {
+        return
+      }
       
       // Cache the result
       suggestionCache.setCached(text, res)
@@ -62,13 +168,31 @@ export default function SuggestPage() {
         saveSuggestHistory({ id: Math.random().toString(36).slice(2), text, timestamp: Date.now(), outfitItemIds: ids })
       }
     } catch (err: any) {
+      // Don't set error if request was aborted
+      if (abortController.signal.aborted || err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+        return
+      }
+      
       console.error(err)
       // Extract error message from API response
       const errorMessage = err?.response?.data?.detail || 'Failed to get suggestion. Ensure backend is running.'
       setError(errorMessage)
       setResult(null)
     } finally {
-      setLoading(false)
+      // Only update loading state if request wasn't aborted
+      if (!abortController.signal.aborted) {
+        setLoading(false)
+        
+        // Clear pending request
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem(PENDING_REQUEST_KEY)
+        }
+      }
+      
+      // Clear abort controller ref
+      if (abortControllerRef.current === abortController) {
+        abortControllerRef.current = null
+      }
     }
   }
 

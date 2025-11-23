@@ -93,9 +93,12 @@ export interface Outfit { items: WardrobeItem[]; score: number; rationale?: stri
 
 export const suggestionsAPI = {
   // New v2 intelligent suggestions
-  suggestV2: async (text: string, limit: number = 3): Promise<V2SuggestResponse> => {
+  suggestV2: async (text: string, limit: number = 3, signal?: AbortSignal): Promise<V2SuggestResponse> => {
     // Allow a longer timeout for first-call warmup on free tier
-    const response = await apiClient.post('/v2/suggestions', { text, limit }, { timeout: 180000 })
+    const response = await apiClient.post('/v2/suggestions', { text, limit }, { 
+      timeout: 180000,
+      signal // Support request cancellation
+    })
     return response.data
   },
   
