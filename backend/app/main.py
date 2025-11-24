@@ -137,11 +137,13 @@ app.include_router(suggestions_v2.router)
 
 
 @app.get("/health")
+@app.head("/health")
 async def health_check():
     """
     Health check endpoint - returns immediately to avoid timeouts.
     This endpoint should respond in < 100ms to prevent deployment platform timeouts.
     Use /ready for readiness check (waits for startup completion).
+    Supports both GET and HEAD methods for monitoring services.
     """
     # Quick database connectivity check (non-blocking, with timeout)
     db_ok = False
