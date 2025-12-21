@@ -31,11 +31,19 @@ async def suggest_outfit_with_gemini(
     limit: int = 3
 ) -> Optional[List[Dict]]:
     logger = logging.getLogger(__name__)
-    gemini_api_key = getattr(settings, 'GEMINI_API_KEY', None)
+    import os
+    gemini_api_key = getattr(settings, 'GEMINI_API_KEY', None) or os.getenv("GEMINI_API_KEY")
 
+    if gemini_api_key:
+        gemini_api_key = str(gemini_api_key).strip()
+    
     if not gemini_api_key:
+        print("Wait! GEMINI_API_KEY is missing in suggestions_v2.")
         logger.error("GEMINI_API_KEY not set.")
         return None
+
+    # Debug using print to force output to terminal
+    print(f"DEBUG: Using Gemini Key (len={len(gemini_api_key)}): {gemini_api_key[:4]}...{gemini_api_key[-4:]}")
 
     try:
 
@@ -90,14 +98,19 @@ async def suggest_outfit_with_gemini(
         
         logger.info(f"Sending prompt to Gemini: {len(wardrobe_items)} items, ~{estimated_tokens} tokens")
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={gemini_api_key}"
-
+        # Remove key from URL to use header authentication instead
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
+        
         profiler = get_profiler()
         # Use structured output for better JSON generation
         # Lower temperature for more consistent, structured responses
         with profiler.measure("gemini_api_request"):
             response = requests.post(
                 url,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": gemini_api_key
+                },
                 json={
                     "contents": [{
                         "parts": [{"text": prompt}]

@@ -277,9 +277,11 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
     
     if image_url and settings.USE_CLOUDINARY and settings.cloudinary_configured:
         try:
-            # Upload to Cloudinary
+            # Upload to Cloudinary (organized by user_id)
+            user_folder = f"{settings.CLOUDINARY_FOLDER}/{current_user.id}"
             upload_result = await upload_image_to_cloudinary(
                 image_data=image_url,
+                folder=user_folder,
                 tags=["wardrobe", payload.type.lower(), payload.category] if payload.category else ["wardrobe", payload.type.lower()]
             )
             if upload_result.get("uploaded"):
@@ -366,9 +368,11 @@ async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Se
                 if item.cloudinary_id:
                     await delete_image_from_cloudinary(item.cloudinary_id)
                 
-                # Upload new image
+                # Upload new image (organized by user_id)
+                user_folder = f"{settings.CLOUDINARY_FOLDER}/{current_user.id}"
                 upload_result = await upload_image_to_cloudinary(
                     image_data=image_url,
+                    folder=user_folder,
                     tags=["wardrobe", payload.type.lower(), payload.category] if payload.category else ["wardrobe", payload.type.lower()]
                 )
                 if upload_result.get("uploaded"):

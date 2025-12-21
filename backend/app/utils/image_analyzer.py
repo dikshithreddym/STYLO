@@ -27,7 +27,8 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
         str: Description of the clothing item, or None if analysis fails
     """
     logger = logging.getLogger(__name__)
-    gemini_api_key = getattr(settings, 'GEMINI_API_KEY', None)
+    import os
+    gemini_api_key = getattr(settings, 'GEMINI_API_KEY', None) or os.getenv("GEMINI_API_KEY")
 
     if not gemini_api_key:
         logger.error("GEMINI_API_KEY not set.")
@@ -42,12 +43,13 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
 
         logger.info(f"Extracted base64 data, length: {len(base64_data)} characters")
 
-        # Using gemini-2.0-flash model
-        model_name = "gemini-2.0-flash"
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={gemini_api_key}"
+        # Using gemini-2.5-flash model
+        model_name = "gemini-2.5-flash"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
 
         headers = {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "x-goog-api-key": gemini_api_key
         }
 
         payload = {

@@ -60,6 +60,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const logout = () => {
         localStorage.removeItem('token')
+        // Clear all application caches to prevent data leakage between users
+        localStorage.removeItem('stylo.wardrobe.cache.v1')
+        localStorage.removeItem('stylo.suggestions.cache.v1')
+        localStorage.removeItem('stylo.filters.state.v1')
+
         setUser(null)
         router.push('/login')
     }
