@@ -206,7 +206,7 @@ export default function SuggestPage() {
               <h3 className="text-lg sm:text-xl font-bold text-gray-900">Top Suggestion</h3>
             )}
             <Button
-              variant="outline"
+              variant="secondary"
               className="text-xs px-2 py-1 h-auto"
               onClick={() => handleSaveOutfit(outfit, index)}
               disabled={savingOutfitIndex === index}
