@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import apiClient from '@/lib/apiClient'
+import { useAuth } from '@/context/AuthContext'
 
 export default function SignupPage() {
     const [email, setEmail] = useState('')
@@ -13,6 +14,7 @@ export default function SignupPage() {
     const [error, setError] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const router = useRouter()
+    const { login } = useAuth()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -31,8 +33,20 @@ export default function SignupPage() {
                 password,
                 full_name: fullName
             })
-            // Redirect to login on success
-            router.push('/login?registered=true')
+
+            // Auto-login after successful registration
+            const formData = new URLSearchParams()
+            formData.append('username', email)
+            formData.append('password', password)
+
+            const loginResponse = await apiClient.post('/auth/login', formData, {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            })
+
+            // This will update auth state and redirect to /wardrobe (handled in AuthContext)
+            login(loginResponse.data.access_token)
         } catch (err: any) {
             console.error(err)
             const detail = err.response?.data?.detail

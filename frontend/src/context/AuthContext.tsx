@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const login = (token: string) => {
         localStorage.setItem('token', token)
         checkAuth()
-        router.push('/')
+        router.push('/wardrobe')
     }
 
     const logout = () => {
