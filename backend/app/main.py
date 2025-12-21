@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import wardrobe_db as wardrobe
 from app.routers import suggestions_v2
+from app.routers import auth
 from app.database import engine, Base
 from app.utils.embedding_service import start_embedding_worker
 from datetime import datetime
@@ -31,13 +32,17 @@ else:
     allowed_origins = [
         "http://localhost:3000",
         "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
         "https://styloapp.vercel.app",
-        os.getenv("FRONTEND_URL", "*"),
+        os.getenv("FRONTEND_URL", "http://localhost:3000"),
     ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins if os.getenv("ENVIRONMENT") == "production" else ["*"],
+    # allow_origins=["*"] with allow_credentials=True is invalid/insecure.
+    # We must restrict to specific domains.
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -134,6 +139,7 @@ async def trigger_backfill():
 # Include routers
 app.include_router(wardrobe.router, prefix="/wardrobe", tags=["wardrobe"])
 app.include_router(suggestions_v2.router)
+app.include_router(auth.router)
 
 
 @app.get("/health")

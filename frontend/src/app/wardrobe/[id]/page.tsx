@@ -8,6 +8,7 @@ import { wardrobeAPI, WardrobeItem } from '@/lib/api'
 import { getColorHex } from '@/lib/colors'
 import { toggleFavorite, getFavorites } from '@/lib/storage'
 import Link from 'next/link'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
 interface PageProps {
   params: { id: string }
@@ -72,66 +73,68 @@ export default function WardrobeItemPage({ params }: PageProps) {
   if (!item) return null
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="container mx-auto px-4 max-w-5xl">
-        <div className="mb-6">
-          <Link href="/wardrobe" className="text-primary-700 hover:underline">← Back to Wardrobe</Link>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <Card>
-            <div className="relative h-96 bg-gray-200">
-              {item.image_url && (
-                <Image src={item.image_url} alt={`${item.color} ${item.type}`} fill className="object-cover" />
-              )}
-            </div>
-          </Card>
-          <div>
+    <ProtectedRoute>
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="container mx-auto px-4 max-w-5xl">
+          <div className="mb-6">
+            <Link href="/wardrobe" className="text-primary-700 hover:underline">← Back to Wardrobe</Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <Card>
-              <div className="p-6">
-                <div className="flex items-start justify-between">
-                  <h1 className="text-3xl font-bold text-gray-900 mb-2">{item.type}</h1>
-                  <button
-                    aria-label="Toggle favorite"
-                    onClick={() => { setFavorite(toggleFavorite(item.id).has(item.id)) }}
-                    className="ml-2 text-gray-400 hover:text-red-600"
-                  >
-                    {favorite ? (
-                      <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.698 3 13.35 3 10.5 3 8.015 5.015 6 7.5 6A5.5 5.5 0 0112 8.019 5.5 5.5 0 0116.5 6C18.985 6 21 8.015 21 10.5c0 2.85-1.688 5.199-3.989 7.007a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.718 0l-.003-.002z"/></svg>
-                    ) : (
-                      <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeWidth="1.5" d="M21 10.5c0 2.85-1.688 5.199-3.989 7.007a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.718 0l-.003-.002-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.698 3 13.35 3 10.5 3 8.015 5.015 6 7.5 6A5.5 5.5 0 0112 8.019 5.5 5.5 0 0116.5 6C18.985 6 21 8.015 21 10.5z"/></svg>
-                    )}
-                  </button>
-                </div>
-                <div className="flex items-center gap-3 mb-4">
-                  <span
-                    className="inline-block w-6 h-6 rounded-full border border-gray-300 shadow-sm"
-                    style={{ backgroundColor: getColorHex(item.color) }}
-                    title={item.color}
-                  ></span>
-                  <span className="text-gray-700">{item.color}</span>
-                </div>
-                {item.category && <div className="text-sm text-gray-500 mb-2">Category: {item.category}</div>}
-                <div className="text-sm text-gray-500 mb-4">Item ID: {item.id}</div>
-                
-                {/* Image Description */}
-                {item.image_description && (
-                  <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                      </svg>
-                      <div>
-                        <h3 className="font-semibold text-blue-900 text-sm mb-1">Description</h3>
-                        <p className="text-blue-800 text-sm leading-relaxed">{item.image_description}</p>
-                      </div>
-                    </div>
-                  </div>
+              <div className="relative h-96 bg-gray-200">
+                {item.image_url && (
+                  <Image src={item.image_url} alt={`${item.color} ${item.type}`} fill className="object-cover" />
                 )}
               </div>
             </Card>
+            <div>
+              <Card>
+                <div className="p-6">
+                  <div className="flex items-start justify-between">
+                    <h1 className="text-3xl font-bold text-gray-900 mb-2">{item.type}</h1>
+                    <button
+                      aria-label="Toggle favorite"
+                      onClick={() => { setFavorite(toggleFavorite(item.id).has(item.id)) }}
+                      className="ml-2 text-gray-400 hover:text-red-600"
+                    >
+                      {favorite ? (
+                        <svg className="w-7 h-7" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.698 3 13.35 3 10.5 3 8.015 5.015 6 7.5 6A5.5 5.5 0 0112 8.019 5.5 5.5 0 0116.5 6C18.985 6 21 8.015 21 10.5c0 2.85-1.688 5.199-3.989 7.007a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.718 0l-.003-.002z" /></svg>
+                      ) : (
+                        <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeWidth="1.5" d="M21 10.5c0 2.85-1.688 5.199-3.989 7.007a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.718 0l-.003-.002-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.698 3 13.35 3 10.5 3 8.015 5.015 6 7.5 6A5.5 5.5 0 0112 8.019 5.5 5.5 0 0116.5 6C18.985 6 21 8.015 21 10.5z" /></svg>
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <span
+                      className="inline-block w-6 h-6 rounded-full border border-gray-300 shadow-sm"
+                      style={{ backgroundColor: getColorHex(item.color) }}
+                      title={item.color}
+                    ></span>
+                    <span className="text-gray-700">{item.color}</span>
+                  </div>
+                  {item.category && <div className="text-sm text-gray-500 mb-2">Category: {item.category}</div>}
+                  <div className="text-sm text-gray-500 mb-4">Item ID: {item.id}</div>
+
+                  {/* Image Description */}
+                  {item.image_description && (
+                    <div className="mt-4 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <h3 className="font-semibold text-blue-900 text-sm mb-1">Description</h3>
+                          <p className="text-blue-800 text-sm leading-relaxed">{item.image_description}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </ProtectedRoute>
   )
 }

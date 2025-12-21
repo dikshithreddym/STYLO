@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   description: 'Manage your wardrobe with style and intelligence',
 }
 
+import { AuthProvider } from '@/context/AuthContext'
+
 export default function RootLayout({
   children,
 }: {
@@ -18,10 +20,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Navbar />
-        <main className="min-h-screen">
-          {children}
-        </main>
+        <AuthProvider>
+          <Navbar />
+          <main className="min-h-screen">
+            {children}
+          </main>
+        </AuthProvider>
       </body>
     </html>
   )

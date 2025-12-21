@@ -43,6 +43,7 @@ def _create_searchable_text(item: WardrobeItem) -> str:
 def retrieve_relevant_items(
     query: str,
     db: Session,
+    user_id: int,
     limit_per_category: Optional[int] = None,
     min_items_per_category: Optional[int] = None,
     min_total_items: Optional[int] = None,
@@ -54,6 +55,7 @@ def retrieve_relevant_items(
     Args:
         query: User's outfit request (e.g., "business meeting", "casual date")
         db: Database session
+        user_id: ID of the user to filter items for
         limit_per_category: Maximum items to retrieve per category (None = auto-calculate from data volume)
         min_items_per_category: Minimum items required per category before fallback (None = auto-calculate)
         min_total_items: Minimum total items required before fallback to full wardrobe (None = auto-calculate)
@@ -68,7 +70,7 @@ def retrieve_relevant_items(
         # OPTIMIZATION: First get count to determine if we need RAG filtering
         # This avoids loading all items into memory if wardrobe is small
         with profiler.measure("db_query_count"):
-            total_count = db.query(WardrobeItem).count()
+            total_count = db.query(WardrobeItem).filter(WardrobeItem.user_id == user_id).count()
         
         if total_count == 0:
             logger.info("No wardrobe items found in database")
@@ -89,12 +91,13 @@ def retrieve_relevant_items(
         if total_count < min_total_items:
             logger.info(f"Wardrobe size ({total_count}) is below minimum ({min_total_items}), returning all items")
             with profiler.measure("db_query_all_items"):
-                return db.query(WardrobeItem).all()
+                return db.query(WardrobeItem).filter(WardrobeItem.user_id == user_id).all()
         
         # OPTIMIZATION: Only query items with embeddings first (RAG requires embeddings)
         # This reduces memory usage and speeds up processing for large wardrobes
         with profiler.measure("db_query_items_with_embeddings"):
             all_items = db.query(WardrobeItem).filter(
+                WardrobeItem.user_id == user_id,
                 WardrobeItem.embedding.isnot(None)
             ).all()
         
@@ -102,7 +105,7 @@ def retrieve_relevant_items(
         if not all_items:
             logger.warning("No items with embeddings found, falling back to all items")
             with profiler.measure("db_query_all_items"):
-                all_items = db.query(WardrobeItem).all()
+                all_items = db.query(WardrobeItem).filter(WardrobeItem.user_id == user_id).all()
         
         # Initialize embedder
         emb = Embedder.instance()
@@ -230,7 +233,7 @@ def retrieve_relevant_items(
         # Fallback to full wardrobe if insufficient items
         if has_insufficient_items or len(retrieved_items) < min_total_items:
             logger.info(f"Retrieved {len(retrieved_items)} items, but minimum not met. Falling back to full wardrobe ({len(all_items)} items)")
-            return all_items
+            return all_items # all_items is already filtered by user_id
         
         logger.info(f"Retrieved {len(retrieved_items)} items from {len(all_items)} total (reduction: {100 * (1 - len(retrieved_items) / len(all_items)):.1f}%)")
         return retrieved_items
@@ -239,7 +242,7 @@ def retrieve_relevant_items(
         logger.error(f"Error in retrieve_relevant_items: {e}", exc_info=True)
         # Fallback to all items on error
         try:
-            return db.query(WardrobeItem).all()
+            return db.query(WardrobeItem).filter(WardrobeItem.user_id == user_id).all()
         except Exception:
             return []
 

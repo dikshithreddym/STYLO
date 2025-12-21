@@ -2,10 +2,14 @@
 """
 Database configuration, session management, and models (PostgreSQL only)
 """
-from sqlalchemy import create_engine, Column, Integer, String, Text, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, Column, Integer, String, Text, JSON, DateTime, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base # keep this if needed, but preferred is orm
+from sqlalchemy.orm import sessionmaker, declarative_base
 import os
+from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Get database URL from environment variable or use default PostgreSQL URL
 DATABASE_URL = os.getenv(
@@ -54,6 +58,7 @@ class WardrobeItem(Base):
     cloudinary_id = Column(String(255), nullable=True)  # For deletion
     image_description = Column(Text, nullable=True)  # AI-generated description
     embedding = Column(JSON, nullable=True)  # Cached embedding vector (list of floats)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True) # Making nullable first for migration safety, then we can enforce it
 
     def to_dict(self):
         """Convert to dictionary"""
@@ -65,3 +70,13 @@ class WardrobeItem(Base):
             "category": self.category,
             "image_description": self.image_description,
         }
+
+class User(Base):
+    """User model for authentication"""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    full_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

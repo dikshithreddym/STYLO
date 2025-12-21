@@ -55,3 +55,31 @@ class SuggestResponse(BaseModel):
     alternatives: List[Outfit] = []
     notes: Optional[str] = None
     intent: Optional[str] = Field(None, description="Resolved intent: outfit | item_search | blended_outfit_item | activity_shoes")
+
+from datetime import datetime
+
+"""User Schemas"""
+class UserBase(BaseModel):
+    email: str = Field(..., description="User email address")
+
+class UserCreate(UserBase):
+    password: str = Field(..., description="User password")
+    full_name: Optional[str] = Field(None, description="User full name")
+
+class UserLogin(UserBase):
+    password: str = Field(..., description="User password")
+
+class UserResponse(UserBase):
+    id: int
+    full_name: Optional[str] = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None

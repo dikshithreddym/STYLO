@@ -12,6 +12,22 @@ const apiClient = axios.create({
   timeout: 120000, // 120 seconds (2 minutes) - increased for Gemini API calls
 })
 
+// Request interceptor to add auth token
+apiClient.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token')
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
   (response) => response,

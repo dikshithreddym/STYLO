@@ -7,8 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import get_db, User
 from ..database import WardrobeItem
+from ..utils.auth import get_current_user
 from ..reco.intent import classify_intent_zero_shot
 from ..reco.selector import assemble_outfits
 from ..reco.retriever import retrieve_relevant_items
@@ -77,7 +78,7 @@ def _model_to_dict(it: WardrobeItem) -> dict:
 
 
 @router.post("/suggestions", response_model=V2SuggestResponse)
-async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
+async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Reset profiler for this request
     profiler = reset_profiler()
     
@@ -91,8 +92,11 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     logger = logging.getLogger(__name__)
     query_normalized = text.lower().strip()
     
-    logger.info(f"🔍 Checking cache FIRST for query: '{text}' (normalized: '{query_normalized}')")
-    cached_result = get_cached_suggestion(query_normalized, "fixed")
+    # Use user-specific cache key to prevent sharing suggestions across users
+    cache_key_suffix = f"fixed:{current_user.id}"
+    
+    logger.info(f"🔍 Checking cache FIRST for query: '{text}' (normalized: '{query_normalized}') user: {current_user.id}")
+    cached_result = get_cached_suggestion(query_normalized, cache_key_suffix)
     if cached_result:
         logger.info(f"✅ CACHE HIT for query: '{text}' - returning immediately (skipped DB load)")
         profiler.log_summary("[Suggest] [CACHED] ")
@@ -108,17 +112,18 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                 items = retrieve_relevant_items(
                     query=text,
                     db=db,
+                    user_id=current_user.id,
                     limit_per_category=None,  # Auto-calculate from data volume
                     min_items_per_category=None,  # Auto-calculate from data volume
                     min_total_items=None,  # Auto-calculate from data volume
                     use_intent_boost=True
                 )
             except Exception as e:
-                # Fallback to full wardrobe on retrieval error
+                # Fallback to full wardrobe (filtered by user) on retrieval error
                 print(f"RAG retrieval failed, using full wardrobe: {e}")
-                items = db.query(WardrobeItem).all()
+                items = db.query(WardrobeItem).filter(WardrobeItem.user_id == current_user.id).all()
         else:
-            items = db.query(WardrobeItem).all()
+            items = db.query(WardrobeItem).filter(WardrobeItem.user_id == current_user.id).all()
     
     wardrobe = [_model_to_dict(it) for it in items]
     if not wardrobe:
@@ -155,7 +160,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
                 if v2_outfits:
                     result = V2SuggestResponse(intent=intent, outfits=v2_outfits)
                     # Cache the result (5 minutes TTL) - use fixed hash for consistency
-                    cache_success = set_cached_suggestion(query_normalized, "fixed", result.dict(), ttl=300)
+                    cache_success = set_cached_suggestion(query_normalized, cache_key_suffix, result.dict(), ttl=300)
                     logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}'")
                     profiler.log_summary("[Suggest] ")
                     return result
@@ -193,6 +198,6 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db)):
     profiler.log_summary("[Suggest] ")
     result = V2SuggestResponse(intent=intent, outfits=v2_outfits) if v2_outfits else V2SuggestResponse(intent=intent, outfits=[])
     # Cache the result (5 minutes TTL) - use fixed hash for consistency
-    cache_success = set_cached_suggestion(query_normalized, "fixed", result.dict(), ttl=300)
+    cache_success = set_cached_suggestion(query_normalized, cache_key_suffix, result.dict(), ttl=300)
     logger.info(f"{'✅ Cached result' if cache_success else '❌ Failed to cache result'} for query: '{text}'")
     return result

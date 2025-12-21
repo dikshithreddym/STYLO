@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from app.schemas import WardrobeItem as WardrobeItemSchema, WardrobeItemCreate
-from app.database import WardrobeItem as WardrobeItemModel
+from app.database import WardrobeItem as WardrobeItemModel, User
 from app.database import get_db
+from app.utils.auth import get_current_user
 from app.utils.cloudinary_helper import (
     upload_image_to_cloudinary,
     delete_image_from_cloudinary,
@@ -19,6 +20,60 @@ import requests, base64
 import cloudinary
 import cloudinary.api
 
+
+def _infer_category_and_type(public_id: str, tags: list) -> Tuple[str, str]:
+    """
+    Infer clothing type and category from Cloudinary public_id and tags.
+    Returns: (type, category)
+    """
+    text = (public_id + " " + " ".join(tags)).lower()
+    
+    # Defaults
+    inferred_type = "Clothing Item"
+    category = "top"
+    
+    # Map keywords to categories and types
+    if any(k in text for k in ["shoe", "sneaker", "boot", "sandal", "heels", "loafer"]):
+        category = "footwear"
+        inferred_type = "Shoes"
+        if "sneaker" in text: inferred_type = "Sneakers"
+        elif "boot" in text: inferred_type = "Boots"
+        elif "sandal" in text: inferred_type = "Sandals"
+    
+    elif any(k in text for k in ["pant", "jeans", "trouser", "short", "legging", "skirt"]):
+        category = "bottom"
+        inferred_type = "Bottoms"
+        if "jeans" in text: inferred_type = "Jeans"
+        elif "short" in text: inferred_type = "Shorts"
+        elif "skirt" in text: inferred_type = "Skirt"
+        
+    elif any(k in text for k in ["jacket", "coat", "blazer", "hoodie", "sweater", "cardigan", "vest"]):
+        category = "layer"
+        inferred_type = "Layer"
+        if "jacket" in text: inferred_type = "Jacket"
+        elif "coat" in text: inferred_type = "Coat"
+        elif "hoodie" in text: inferred_type = "Hoodie"
+        
+    elif any(k in text for k in ["dress", "jumpsuit", "romper", "suit"]):
+        category = "one-piece"
+        inferred_type = "One-Piece"
+        if "dress" in text: inferred_type = "Dress"
+        elif "suit" in text: inferred_type = "Suit"
+        
+    elif any(k in text for k in ["bag", "purse", "wallet", "belt", "hat", "cap", "scarf", "glasses", "watch"]):
+        category = "accessories"
+        inferred_type = "Accessory"
+        if "bag" in text: inferred_type = "Bag"
+        elif "hat" in text or "cap" in text: inferred_type = "Hat"
+        
+    elif any(k in text for k in ["shirt", "tee", "top", "blouse", "polo", "tank"]):
+        category = "top"
+        inferred_type = "Top"
+        if "t-shirt" in text or "tee" in text: inferred_type = "T-Shirt"
+        elif "shirt" in text: inferred_type = "Shirt"
+        
+    return inferred_type, category
+
 router = APIRouter()
 
 
@@ -26,6 +81,7 @@ router = APIRouter()
 async def get_wardrobe_items(
     response: Response,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(100, ge=1, le=100, description="Items per page (max 100)"),
 ):
@@ -33,20 +89,14 @@ async def get_wardrobe_items(
     Get wardrobe items with pagination.
     Filtering and sorting are handled client-side for better performance.
     """
-    # OPTIMIZATION: Use window function to get count and items in a single query
-    # This is more efficient than separate count() and select queries
-    query = db.query(
-        WardrobeItemModel,
-        func.count().over().label('total')
-    )
+    # Standard query with filtering
+    query = db.query(WardrobeItemModel).filter(WardrobeItemModel.user_id == current_user.id)
+    
+    # Get total count
+    total = query.count()
     
     # Apply pagination
-    results = query.offset((page - 1) * page_size).limit(page_size).all()
-    
-    # Extract items and total count from results
-    # Results are tuples: (WardrobeItemModel, total_count)
-    items = [row[0] for row in results]
-    total = results[0][1] if results else 0
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
 
     # Set total count header
     response.headers["X-Total-Count"] = str(total)
@@ -63,10 +113,11 @@ async def cloudinary_status():
     return get_cloudinary_status()
 
 @router.delete("/clear-all")
-async def clear_all_items(db: Session = Depends(get_db)):
+async def clear_all_items(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Remove all wardrobe items (dangerous)."""
-    count = db.query(WardrobeItemModel).count()
-    db.query(WardrobeItemModel).delete()
+    query = db.query(WardrobeItemModel).filter(WardrobeItemModel.user_id == current_user.id)
+    count = query.count()
+    query.delete(synchronize_session=False)
     db.commit()
     return {"status": "ok", "removed": count}
 
@@ -99,6 +150,7 @@ async def refresh_embeddings(
 @router.post("/sync-cloudinary")
 async def sync_from_cloudinary(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     folder: Optional[str] = Query(None, description="Cloudinary folder prefix; defaults to settings.CLOUDINARY_FOLDER"),
     max_results: int = Query(100, ge=1, le=500, description="Max resources to pull per page"),
 ):
@@ -157,6 +209,7 @@ async def sync_from_cloudinary(
                 category=category,
                 cloudinary_id=public_id,
                 image_description=desc,
+                user_id=current_user.id
             )
             db.add(item)
             created += 1
@@ -171,9 +224,9 @@ async def sync_from_cloudinary(
 
 
 @router.post("/recategorize")
-async def recategorize_from_descriptions(db: Session = Depends(get_db)):
+async def recategorize_from_descriptions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Re-categorize items based on their Gemini-generated descriptions"""
-    items = db.query(WardrobeItemModel).all()
+    items = db.query(WardrobeItemModel).filter(WardrobeItemModel.user_id == current_user.id).all()
     updated = 0
     
     for item in items:
@@ -200,18 +253,18 @@ async def recategorize_from_descriptions(db: Session = Depends(get_db)):
 
 
 @router.get("/{item_id}", response_model=WardrobeItemSchema)
-async def get_wardrobe_item(item_id: int, db: Session = Depends(get_db)):
+async def get_wardrobe_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Get a specific wardrobe item by ID
     """
-    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id).first()
+    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id, WardrobeItemModel.user_id == current_user.id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     return item.to_dict()
 
 
 @router.post("", response_model=WardrobeItemSchema, status_code=201)
-async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depends(get_db)):
+async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Add a new item to the wardrobe
     """
@@ -275,6 +328,7 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
         category=payload.category,
         cloudinary_id=cloudinary_public_id,
         image_description=description,
+        user_id=current_user.id
     )
     db.add(new_item)
     db.commit()
@@ -287,11 +341,11 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
 
 
 @router.patch("/{item_id}", response_model=WardrobeItemSchema)
-async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Session = Depends(get_db)):
+async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Update a wardrobe item by ID
     """
-    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id).first()
+    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id, WardrobeItemModel.user_id == current_user.id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     
@@ -348,11 +402,11 @@ async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Se
 
 
 @router.delete("/{item_id}", status_code=204)
-async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db)):
+async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Delete a wardrobe item by ID
     """
-    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id).first()
+    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id, WardrobeItemModel.user_id == current_user.id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     
