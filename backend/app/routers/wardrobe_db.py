@@ -253,6 +253,38 @@ async def recategorize_from_descriptions(db: Session = Depends(get_db), current_
     return {"status": "ok", "updated": updated}
 
 
+
+@router.post("/outfits", response_model=SavedOutfitResponse, status_code=201)
+async def save_outfit(payload: SavedOutfitCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Save a generated outfit"""
+    outfit = SavedOutfit(
+        user_id=current_user.id,
+        name=payload.name or f"Outfit {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+        items=payload.items
+    )
+    db.add(outfit)
+    db.commit()
+    db.refresh(outfit)
+    return outfit
+
+
+@router.get("/outfits", response_model=List[SavedOutfitResponse])
+async def get_saved_outfits(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get all saved outfits for the current user"""
+    return db.query(SavedOutfit).filter(SavedOutfit.user_id == current_user.id).order_by(SavedOutfit.created_at.desc()).all()
+
+
+@router.delete("/outfits/{outfit_id}", status_code=204)
+async def delete_saved_outfit(outfit_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Delete a saved outfit"""
+    outfit = db.query(SavedOutfit).filter(SavedOutfit.id == outfit_id, SavedOutfit.user_id == current_user.id).first()
+    if not outfit:
+        raise HTTPException(status_code=404, detail="Outfit not found")
+    db.delete(outfit)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.get("/{item_id}", response_model=WardrobeItemSchema)
 async def get_wardrobe_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
@@ -428,33 +460,4 @@ async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db), curr
     return Response(status_code=204)
 
 
-@router.post("/outfits", response_model=SavedOutfitResponse, status_code=201)
-async def save_outfit(payload: SavedOutfitCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Save a generated outfit"""
-    outfit = SavedOutfit(
-        user_id=current_user.id,
-        name=payload.name or f"Outfit {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
-        items=payload.items
-    )
-    db.add(outfit)
-    db.commit()
-    db.refresh(outfit)
-    return outfit
-
-
-@router.get("/outfits", response_model=List[SavedOutfitResponse])
-async def get_saved_outfits(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Get all saved outfits for the current user"""
-    return db.query(SavedOutfit).filter(SavedOutfit.user_id == current_user.id).order_by(SavedOutfit.created_at.desc()).all()
-
-
-@router.delete("/outfits/{outfit_id}", status_code=204)
-async def delete_saved_outfit(outfit_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Delete a saved outfit"""
-    outfit = db.query(SavedOutfit).filter(SavedOutfit.id == outfit_id, SavedOutfit.user_id == current_user.id).first()
-    if not outfit:
-        raise HTTPException(status_code=404, detail="Outfit not found")
-    db.delete(outfit)
-    db.commit()
-    return Response(status_code=204)
 
