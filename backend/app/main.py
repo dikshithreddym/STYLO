@@ -24,19 +24,30 @@ app = FastAPI(
 )
 
 # CORS configuration
-# Prefer comma-separated CORS_ORIGINS if provided, otherwise fallback to FRONTEND_URL
+# CORS configuration
+# We start with a default list of known trusted origins
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "https://styloapp.vercel.app",  # Production Vercel Frontend
+]
+
+# Add any additional origins from environment (CORS_ORIGINS)
 cors_from_env = os.getenv("CORS_ORIGINS")
 if cors_from_env:
-    allowed_origins = [o.strip() for o in cors_from_env.split(",") if o.strip()]
-else:
-    allowed_origins = [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "https://styloapp.vercel.app",
-        os.getenv("FRONTEND_URL", "http://localhost:3000"),
-    ]
+    for origin in cors_from_env.split(","):
+        o = origin.strip()
+        if o and o not in allowed_origins:
+            allowed_origins.append(o)
+
+# Add widely used fallback if set
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url and frontend_url not in allowed_origins:
+    allowed_origins.append(frontend_url)
+
+print(f"✅ Enabled CORS for origins: {allowed_origins}")
 
 app.add_middleware(
     CORSMiddleware,
