@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Image from 'next/image'
-import { suggestionsAPI, V2SuggestResponse, V2Outfit, V2Item } from '@/lib/api'
+import { suggestionsAPI, V2SuggestResponse, V2Outfit, V2Item, outfitsAPI } from '@/lib/api'
 import { saveSuggestHistory } from '@/lib/storage'
 import { getColorHex } from '@/lib/colors'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
@@ -57,6 +57,7 @@ export default function SuggestPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<V2SuggestResponse | null>(null)
+  const [savingOutfitIndex, setSavingOutfitIndex] = useState<number | null>(null)
 
   // Load persisted query and result on mount
   useEffect(() => {
@@ -101,6 +102,35 @@ export default function SuggestPage() {
       saveResultToStorage(null)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSaveOutfit = async (outfit: V2Outfit, index: number) => {
+    try {
+      setSavingOutfitIndex(index)
+      // Extract items and remove nulls/undefined for cleaner storage
+      const itemsToSave = {
+        top: outfit.top,
+        bottom: outfit.bottom,
+        footwear: outfit.footwear,
+        outerwear: outfit.outerwear,
+        accessories: outfit.accessories
+      }
+
+      const intentName = result?.intent || 'Outfit'
+      // Capitalize first letter
+      const prettyIntent = intentName.charAt(0).toUpperCase() + intentName.slice(1)
+
+      await outfitsAPI.save({
+        items: itemsToSave,
+        name: `${prettyIntent} Suggestion`
+      })
+      alert('Outfit saved to wardrobe!')
+    } catch (e) {
+      console.error(e)
+      alert('Failed to save outfit')
+    } finally {
+      setSavingOutfitIndex(null)
     }
   }
 
@@ -169,11 +199,21 @@ export default function SuggestPage() {
     return (
       <div key={index} className="mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
-          {index > 0 ? (
-            <h3 className="text-lg sm:text-xl font-bold text-gray-900">Alternative #{index}</h3>
-          ) : (
-            <h3 className="text-lg sm:text-xl font-bold text-gray-900">Top Suggestion</h3>
-          )}
+          <div className="flex items-center gap-3">
+            {index > 0 ? (
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900">Alternative #{index}</h3>
+            ) : (
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900">Top Suggestion</h3>
+            )}
+            <Button
+              variant="outline"
+              className="text-xs px-2 py-1 h-auto"
+              onClick={() => handleSaveOutfit(outfit, index)}
+              disabled={savingOutfitIndex === index}
+            >
+              {savingOutfitIndex === index ? 'Saving...' : 'Save Outfit'}
+            </Button>
+          </div>
           <div className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold border ${scoreBg} ${scoreColor} self-start sm:self-auto`}>
             {score >= 90 && (
               <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -206,7 +246,7 @@ export default function SuggestPage() {
       <div className="min-h-screen bg-gray-50 py-6 sm:py-12">
         <div className="container mx-auto px-4 sm:px-6">
           <div className="mb-6 sm:mb-8">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">AI Outfit Suggestions</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">Outfit Suggestions</h1>
             <p className="text-sm sm:text-base text-gray-600 leading-relaxed">Describe your occasion, and our AI will suggest intelligent outfits using semantic matching and color harmony.</p>
           </div>
 

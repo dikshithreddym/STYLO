@@ -95,13 +95,13 @@ export const suggestionsAPI = {
   // New v2 intelligent suggestions
   suggestV2: async (text: string, limit: number = 3, signal?: AbortSignal): Promise<V2SuggestResponse> => {
     // Allow a longer timeout for first-call warmup on free tier
-    const response = await apiClient.post('/v2/suggestions', { text, limit }, { 
+    const response = await apiClient.post('/v2/suggestions', { text, limit }, {
       timeout: 180000,
       signal // Support request cancellation
     })
     return response.data
   },
-  
+
   // Legacy v1 suggestions (fallback)
   suggest: async (text: string, options?: { limit?: number; strategy?: 'rules' | 'ml' }): Promise<{
     occasion: string
@@ -113,4 +113,28 @@ export const suggestionsAPI = {
     const response = await apiClient.post('/suggestions', { text, ...options })
     return response.data
   },
+}
+
+export interface SavedOutfit {
+  id: number
+  user_id: number
+  name?: string
+  items: Record<string, V2Item | null>
+  created_at: string
+}
+
+export const outfitsAPI = {
+  save: async (outfit: { name?: string; items: Record<string, any> }): Promise<SavedOutfit> => {
+    const response = await apiClient.post('/wardrobe/outfits', outfit)
+    return response.data
+  },
+
+  getAll: async (): Promise<SavedOutfit[]> => {
+    const response = await apiClient.get('/wardrobe/outfits')
+    return response.data
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await apiClient.delete(`/wardrobe/outfits/${id}`)
+  }
 }

@@ -83,3 +83,15 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+
+"""Saved Outfit Schemas"""
+class SavedOutfitCreate(BaseModel):
+    name: Optional[str] = None
+    items: dict = Field(..., description="JSON object containing outfit items")
+
+class SavedOutfitResponse(SavedOutfitCreate):
+    id: int
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True

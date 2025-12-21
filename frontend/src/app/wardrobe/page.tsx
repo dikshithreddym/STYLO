@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import Image from 'next/image'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-import { wardrobeAPI, WardrobeItem } from '@/lib/api'
+import { wardrobeAPI, WardrobeItem, outfitsAPI, SavedOutfit, V2Item } from '@/lib/api'
 import { getFavorites, toggleFavorite } from '@/lib/storage'
 import { getColorHex } from '@/lib/colors'
 import AddItemModal from '@/components/modals/AddItemModal'
@@ -19,6 +19,10 @@ export default function WardrobePage() {
   const [displayedItems, setDisplayedItems] = useState<WardrobeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Saved Outfits
+  const [savedOutfits, setSavedOutfits] = useState<SavedOutfit[]>([])
+  const [activeTab, setActiveTab] = useState<'items' | 'outfits'>('items')
 
   // Filter states
   const [q, setQ] = useState('')
@@ -85,6 +89,25 @@ export default function WardrobePage() {
     }
   }
 
+  const fetchAllOutfits = async () => {
+    try {
+      const data = await outfitsAPI.getAll()
+      setSavedOutfits(data)
+    } catch (e) {
+      console.error("Failed to load outfits", e)
+    }
+  }
+
+  const handleDeleteOutfit = async (id: number) => {
+    if (!confirm('Delete this outfit?')) return
+    try {
+      await outfitsAPI.delete(id)
+      setSavedOutfits(prev => prev.filter(o => o.id !== id))
+    } catch (e) {
+      alert('Failed to delete outfit')
+    }
+  }
+
   // Load wardrobe items on mount
   useEffect(() => {
     // Restore filter state from cache
@@ -100,6 +123,7 @@ export default function WardrobePage() {
     }
 
     fetchAllWardrobeItems()
+    fetchAllOutfits()
     setFavorites(getFavorites())
   }, [])
 
@@ -259,7 +283,7 @@ export default function WardrobePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm text-gray-500 mb-1 font-medium">Outfits Created</p>
-                  <p className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-600 to-purple-500 bg-clip-text text-transparent">0</p>
+                  <p className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-600 to-purple-500 bg-clip-text text-transparent">{savedOutfits.length}</p>
                 </div>
                 <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg">
                   <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,209 +294,287 @@ export default function WardrobePage() {
             </div>
           </div>
 
-          {/* Wardrobe Header */}
-          <div className="mb-4 sm:mb-6 md:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-            <div>
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-1">My Wardrobe</h2>
-              <p className="text-gray-600 text-xs sm:text-sm md:text-base">Browse and manage your clothing collection</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => fetchAllWardrobeItems(true)}
-                disabled={loading}
-                className="inline-flex items-center justify-center px-3 sm:px-4 py-2 sm:py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg sm:rounded-xl shadow-sm hover:shadow transition-all duration-200 font-medium text-xs sm:text-sm whitespace-nowrap"
-                title="Refresh wardrobe"
-              >
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center justify-center px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium text-sm sm:text-base whitespace-nowrap w-full sm:w-auto"
-              >
-                <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Item
-              </button>
-            </div>
+
+          {/* Navigation Tabs */}
+          <div className="flex space-x-6 border-b border-gray-200 mb-6">
+            <button
+              onClick={() => setActiveTab('items')}
+              className={`pb-3 text-sm sm:text-base font-medium transition-colors relative ${activeTab === 'items' ? 'text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Wardrobe Items
+              {activeTab === 'items' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary-600 rounded-t-full"></span>}
+            </button>
+            <button
+              onClick={() => setActiveTab('outfits')}
+              className={`pb-3 text-sm sm:text-base font-medium transition-colors relative ${activeTab === 'outfits' ? 'text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Outfits Created
+              {activeTab === 'outfits' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary-600 rounded-t-full"></span>}
+            </button>
           </div>
 
-          {/* Filters */}
-          <div className="mb-4 sm:mb-6 bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4 md:p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Search</label>
-                <input
-                  value={q}
-                  onChange={(e) => { setQ(e.target.value); setPage(1) }}
-                  placeholder="Search by type or color"
-                  className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
-                />
+          {activeTab === 'items' && (
+            <>
+              {/* Wardrobe Header */}
+              <div className="mb-4 sm:mb-6 md:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-1">My Wardrobe</h2>
+                  <p className="text-gray-600 text-xs sm:text-sm md:text-base">Browse and manage your clothing collection</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => fetchAllWardrobeItems(true)}
+                    disabled={loading}
+                    className="inline-flex items-center justify-center px-3 sm:px-4 py-2 sm:py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg sm:rounded-xl shadow-sm hover:shadow transition-all duration-200 font-medium text-xs sm:text-sm whitespace-nowrap"
+                    title="Refresh wardrobe"
+                  >
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="inline-flex items-center justify-center px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg sm:rounded-xl shadow-md hover:shadow-lg transition-all duration-200 font-medium text-sm sm:text-base whitespace-nowrap w-full sm:w-auto"
+                  >
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Item
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Type</label>
-                <select
-                  value={typeFilter}
-                  onChange={(e) => { setTypeFilter(e.target.value); setPage(1) }}
-                  className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                >
-                  <option value="">All</option>
-                  {uniqueTypes.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Color</label>
-                <select
-                  value={colorFilter}
-                  onChange={(e) => { setColorFilter(e.target.value); setPage(1) }}
-                  className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                >
-                  <option value="">All</option>
-                  {uniqueColors.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => { setCategoryFilter(e.target.value); setPage(1) }}
-                  className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                >
-                  <option value="">All</option>
-                  {['top', 'bottom', 'footwear', 'layer', 'one-piece', 'accessories'].map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Sort</label>
-                <select
-                  value={sort}
-                  onChange={(e) => { setSort(e.target.value as any); setPage(1) }}
-                  className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
-                >
-                  <option value="id">ID (asc)</option>
-                  <option value="-id">ID (desc)</option>
-                  <option value="type">Type (A→Z)</option>
-                  <option value="-type">Type (Z→A)</option>
-                  <option value="color">Color (A→Z)</option>
-                  <option value="-color">Color (Z→A)</option>
-                </select>
-              </div>
-            </div>
-            {/* Pagination controls */}
-            <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-              <div className="text-xs sm:text-sm text-gray-600">
-                Showing {displayedItems.length} of {totalFiltered} items
-              </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="px-2.5 sm:px-3 py-1.5 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={page === 1}
-                >Prev</button>
-                <span className="text-xs sm:text-sm text-gray-700 font-medium px-2">Page {page}</span>
-                <button
-                  onClick={() => setPage((p) => (p * pageSize < totalFiltered ? p + 1 : p))}
-                  className="px-2.5 sm:px-3 py-1.5 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={page * pageSize >= totalFiltered}
-                >Next</button>
-                <select
-                  value={pageSize}
-                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
-                  className="ml-0 sm:ml-2 px-2 py-1.5 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  {[8, 12, 16, 24].map(n => <option key={n} value={n}>{n}/page</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
 
-          {/* Wardrobe Grid */}
-          {displayedItems.length === 0 ? (
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 md:p-12 text-center">
-              <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <p className="text-gray-600 text-base sm:text-lg">No items in your wardrobe yet.</p>
-              <p className="text-gray-500 text-xs sm:text-sm mt-2">Add your first item to get started!</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4 lg:gap-6">
-              {displayedItems.map((item) => (
-                <div key={item.id} className="group bg-white rounded-lg sm:rounded-xl md:rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
-                  {/* Image */}
-                  <div className="relative h-40 sm:h-48 md:h-56 lg:h-64 xl:h-72 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
-                    {item.image_url ? (
-                      <Image
-                        src={item.image_url}
-                        alt={`${item.color} ${item.type}`}
-                        fill
-                        className="object-cover group-hover:scale-110 transition-transform duration-500"
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <svg className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                    )}
-                    {/* Category label at top-left */}
-                    {item.category && (
-                      <div className="absolute top-2 left-2 px-2 py-1 bg-black/70 text-white text-xs font-medium rounded-md backdrop-blur-sm">
-                        {item.category.charAt(0).toUpperCase() + item.category.slice(1)}
-                      </div>
-                    )}
-                    {/* Favorite button overlay */}
-                    <button
-                      aria-label="Toggle favorite"
-                      onClick={() => setFavorites(new Set(toggleFavorite(item.id)))}
-                      className="absolute top-2 right-2 sm:top-3 sm:right-3 w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md hover:bg-white transition-all"
-                      title="Add to favorites"
-                    >
-                      {favorites.has(item.id) ? (
-                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-red-500" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.698 3 13.35 3 10.5 3 8.015 5.015 6 7.5 6A5.5 5.5 0 0112 8.019 5.5 5.5 0 0116.5 6C18.985 6 21 8.015 21 10.5c0 2.85-1.688 5.199-3.989 7.007a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.718 0l-.003-.002z" /></svg>
-                      ) : (
-                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeWidth="1.5" d="M21 10.5c0 2.85-1.688 5.199-3.989 7.007a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.718 0l-.003-.002-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.698 3 13.35 3 10.5 3 8.015 5.015 6 7.5 6A5.5 5.5 0 0112 8.019 5.5 5.5 0 0116.5 6C18.985 6 21 8.015 21 10.5z" /></svg>
-                      )}
-                    </button>
+              {/* Filters */}
+              <div className="mb-4 sm:mb-6 bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-3 sm:p-4 md:p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Search</label>
+                    <input
+                      value={q}
+                      onChange={(e) => { setQ(e.target.value); setPage(1) }}
+                      placeholder="Search by type or color"
+                      className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900"
+                    />
                   </div>
-
-                  {/* Info */}
-                  <div className="p-2 sm:p-3 md:p-4">
-                    <h3 className="font-semibold text-xs sm:text-sm md:text-base lg:text-lg text-gray-900 mb-1 line-clamp-2">{item.type}</h3>
-                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                      <span className="inline-block w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border border-gray-300 shadow-sm flex-shrink-0"
-                        style={{ backgroundColor: getColorHex(item.color) }}
-                        title={item.color}
-                      ></span>
-                      <p className="text-gray-600 text-xs sm:text-sm truncate">{item.color}</p>
-                    </div>
-                    <div className="flex gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-gray-100">
-                      <a
-                        href={`/wardrobe/${item.id}`}
-                        className="flex-1 text-center px-1.5 sm:px-2 md:px-3 py-1 sm:py-1.5 md:py-2 text-primary-600 hover:bg-primary-50 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-colors"
-                      >
-                        View
-                      </a>
-                      <button
-                        onClick={(e) => { e.preventDefault(); handleDelete(item.id) }}
-                        disabled={deletingId === item.id}
-                        className="flex-1 text-center px-1.5 sm:px-2 md:px-3 py-1 sm:py-1.5 md:py-2 text-red-600 hover:bg-red-50 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-colors disabled:opacity-50"
-                      >
-                        {deletingId === item.id ? 'Deleting...' : 'Delete'}
-                      </button>
-                    </div>
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Type</label>
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => { setTypeFilter(e.target.value); setPage(1) }}
+                      className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                    >
+                      <option value="">All</option>
+                      {uniqueTypes.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Color</label>
+                    <select
+                      value={colorFilter}
+                      onChange={(e) => { setColorFilter(e.target.value); setPage(1) }}
+                      className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                    >
+                      <option value="">All</option>
+                      {uniqueColors.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <select
+                      value={categoryFilter}
+                      onChange={(e) => { setCategoryFilter(e.target.value); setPage(1) }}
+                      className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                    >
+                      <option value="">All</option>
+                      {['top', 'bottom', 'footwear', 'layer', 'one-piece', 'accessories'].map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Sort</label>
+                    <select
+                      value={sort}
+                      onChange={(e) => { setSort(e.target.value as any); setPage(1) }}
+                      className="w-full px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-gray-900"
+                    >
+                      <option value="id">ID (asc)</option>
+                      <option value="-id">ID (desc)</option>
+                      <option value="type">Type (A→Z)</option>
+                      <option value="-type">Type (Z→A)</option>
+                      <option value="color">Color (A→Z)</option>
+                      <option value="-color">Color (Z→A)</option>
+                    </select>
                   </div>
                 </div>
-              ))}
+                {/* Pagination controls */}
+                <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                  <div className="text-xs sm:text-sm text-gray-600">
+                    Showing {displayedItems.length} of {totalFiltered} items
+                  </div>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      className="px-2.5 sm:px-3 py-1.5 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={page === 1}
+                    >Prev</button>
+                    <span className="text-xs sm:text-sm text-gray-700 font-medium px-2">Page {page}</span>
+                    <button
+                      onClick={() => setPage((p) => (p * pageSize < totalFiltered ? p + 1 : p))}
+                      className="px-2.5 sm:px-3 py-1.5 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={page * pageSize >= totalFiltered}
+                    >Next</button>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
+                      className="ml-0 sm:ml-2 px-2 py-1.5 sm:py-1 text-xs sm:text-sm border border-gray-300 rounded bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      {[8, 12, 16, 24].map(n => <option key={n} value={n}>{n}/page</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Wardrobe Grid */}
+              {displayedItems.length === 0 ? (
+                <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 md:p-12 text-center">
+                  <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  <p className="text-gray-600 text-base sm:text-lg">No items in your wardrobe yet.</p>
+                  <p className="text-gray-500 text-xs sm:text-sm mt-2">Add your first item to get started!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3 md:gap-4 lg:gap-6">
+                  {displayedItems.map((item) => (
+                    <div key={item.id} className="group bg-white rounded-lg sm:rounded-xl md:rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
+                      {/* Image */}
+                      <div className="relative h-40 sm:h-48 md:h-56 lg:h-64 xl:h-72 bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+                        {item.image_url ? (
+                          <Image
+                            src={item.image_url}
+                            alt={`${item.color} ${item.type}`}
+                            fill
+                            className="object-cover group-hover:scale-110 transition-transform duration-500"
+                            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <svg className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                        )}
+                        {/* Category label at top-left */}
+                        {item.category && (
+                          <div className="absolute top-2 left-2 px-2 py-1 bg-black/70 text-white text-xs font-medium rounded-md backdrop-blur-sm">
+                            {item.category.charAt(0).toUpperCase() + item.category.slice(1)}
+                          </div>
+                        )}
+                        {/* Favorite button overlay */}
+                        <button
+                          aria-label="Toggle favorite"
+                          onClick={() => setFavorites(new Set(toggleFavorite(item.id)))}
+                          className="absolute top-2 right-2 sm:top-3 sm:right-3 w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md hover:bg-white transition-all"
+                          title="Add to favorites"
+                        >
+                          {favorites.has(item.id) ? (
+                            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-red-500" viewBox="0 0 24 24" fill="currentColor"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.698 3 13.35 3 10.5 3 8.015 5.015 6 7.5 6A5.5 5.5 0 0112 8.019 5.5 5.5 0 0116.5 6C18.985 6 21 8.015 21 10.5c0 2.85-1.688 5.199-3.989 7.007a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.718 0l-.003-.002z" /></svg>
+                          ) : (
+                            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeWidth="1.5" d="M21 10.5c0 2.85-1.688 5.199-3.989 7.007a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.218l-.022.012-.007.003-.003.002a.75.75 0 01-.718 0l-.003-.002-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.698 3 13.35 3 10.5 3 8.015 5.015 6 7.5 6A5.5 5.5 0 0112 8.019 5.5 5.5 0 0116.5 6C18.985 6 21 8.015 21 10.5z" /></svg>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Info */}
+                      <div className="p-2 sm:p-3 md:p-4">
+                        <h3 className="font-semibold text-xs sm:text-sm md:text-base lg:text-lg text-gray-900 mb-1 line-clamp-2">{item.type}</h3>
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                          <span className="inline-block w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border border-gray-300 shadow-sm flex-shrink-0"
+                            style={{ backgroundColor: getColorHex(item.color) }}
+                            title={item.color}
+                          ></span>
+                          <p className="text-gray-600 text-xs sm:text-sm truncate">{item.color}</p>
+                        </div>
+                        <div className="flex gap-2 mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-gray-100">
+                          <a
+                            href={`/wardrobe/${item.id}`}
+                            className="flex-1 text-center px-1.5 sm:px-2 md:px-3 py-1 sm:py-1.5 md:py-2 text-primary-600 hover:bg-primary-50 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-colors"
+                          >
+                            View
+                          </a>
+                          <button
+                            onClick={(e) => { e.preventDefault(); handleDelete(item.id) }}
+                            disabled={deletingId === item.id}
+                            className="flex-1 text-center px-1.5 sm:px-2 md:px-3 py-1 sm:py-1.5 md:py-2 text-red-600 hover:bg-red-50 rounded-md sm:rounded-lg text-xs sm:text-sm font-medium transition-colors disabled:opacity-50"
+                          >
+                            {deletingId === item.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'outfits' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Your Saved Outfits</h2>
+                  <p className="text-gray-500 text-sm">Outfits you've created and saved.</p>
+                </div>
+              </div>
+
+              {savedOutfits.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
+                  <p className="text-gray-600 text-lg">No saved outfits yet.</p>
+                  <a href="/suggest" className="text-primary-600 hover:underline mt-2 inline-block">Generate some suggestions!</a>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {savedOutfits.map(outfit => (
+                    <div key={outfit.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all border border-gray-100 overflow-hidden flex flex-col">
+                      <div className="p-4 border-b border-gray-50 bg-gray-50/50 flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-gray-900">{outfit.name || `Outfit #${outfit.id}`}</h3>
+                          <p className="text-xs text-gray-500">{new Date(outfit.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <button onClick={() => handleDeleteOutfit(outfit.id)} className="text-red-500 hover:text-red-700 text-xs font-medium px-2 py-1 rounded hover:bg-red-50">Delete</button>
+                      </div>
+                      <div className="p-4 flex-1">
+                        <div className="grid grid-cols-5 gap-2">
+                          {/* We render small thumbnails of items */}
+                          {['top', 'bottom', 'footwear', 'outerwear', 'accessories'].map(part => {
+                            const item = outfit.items[part as keyof typeof outfit.items] as V2Item;
+                            if (!item) return null;
+                            return (
+                              <div key={part} className="aspect-square relative rounded-lg overflow-hidden bg-gray-100 border border-gray-200" title={`${part}: ${item.name}`}>
+                                {item.image_url ? (
+                                  <Image src={item.image_url} alt={item.name} fill className="object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">?</div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {Object.values(outfit.items).filter((i): i is V2Item => !!i && typeof i === 'object').map((item) => (
+                            <span key={item.id} className="inline-block px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-md truncate max-w-[100px]">{item.name}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -494,6 +596,6 @@ export default function WardrobePage() {
           />
         )}
       </div>
-    </ProtectedRoute>
+    </ProtectedRoute >
   )
 }

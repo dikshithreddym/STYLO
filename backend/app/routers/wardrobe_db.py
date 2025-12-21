@@ -3,10 +3,11 @@ from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
-from app.schemas import WardrobeItem as WardrobeItemSchema, WardrobeItemCreate
-from app.database import WardrobeItem as WardrobeItemModel, User
+from app.schemas import WardrobeItem as WardrobeItemSchema, WardrobeItemCreate, SavedOutfitCreate, SavedOutfitResponse
+from app.database import WardrobeItem as WardrobeItemModel, User, SavedOutfit
 from app.database import get_db
 from app.utils.auth import get_current_user
+from datetime import datetime
 from app.utils.cloudinary_helper import (
     upload_image_to_cloudinary,
     delete_image_from_cloudinary,
@@ -424,5 +425,36 @@ async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db), curr
     # Invalidate suggestion cache (wardrobe changes affect suggestions)
     cache_clear_pattern("suggestion:*")
     
+    return Response(status_code=204)
+
+
+@router.post("/outfits", response_model=SavedOutfitResponse, status_code=201)
+async def save_outfit(payload: SavedOutfitCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Save a generated outfit"""
+    outfit = SavedOutfit(
+        user_id=current_user.id,
+        name=payload.name or f"Outfit {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+        items=payload.items
+    )
+    db.add(outfit)
+    db.commit()
+    db.refresh(outfit)
+    return outfit
+
+
+@router.get("/outfits", response_model=List[SavedOutfitResponse])
+async def get_saved_outfits(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get all saved outfits for the current user"""
+    return db.query(SavedOutfit).filter(SavedOutfit.user_id == current_user.id).order_by(SavedOutfit.created_at.desc()).all()
+
+
+@router.delete("/outfits/{outfit_id}", status_code=204)
+async def delete_saved_outfit(outfit_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Delete a saved outfit"""
+    outfit = db.query(SavedOutfit).filter(SavedOutfit.id == outfit_id, SavedOutfit.user_id == current_user.id).first()
+    if not outfit:
+        raise HTTPException(status_code=404, detail="Outfit not found")
+    db.delete(outfit)
+    db.commit()
     return Response(status_code=204)
 

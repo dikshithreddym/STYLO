@@ -80,3 +80,13 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class SavedOutfit(Base):
+    """Saved outfit model"""
+    __tablename__ = "saved_outfits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=True) # Optional name for the outfit
+    items = Column(JSON, nullable=False) # JSON object with keys like 'top', 'bottom', etc. containing item IDs or details
+    created_at = Column(DateTime, default=datetime.utcnow)
