@@ -58,6 +58,13 @@ export default function SuggestPage() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<V2SuggestResponse | null>(null)
   const [savingOutfitIndex, setSavingOutfitIndex] = useState<number | null>(null)
+  const promptIdeas = [
+    'Creative brunch at an art gallery',
+    'Remote work day at a coffee shop',
+    'Evening rooftop party with friends',
+    'Winter city stroll and warm drinks',
+    'Outdoor concert in mild weather',
+  ]
 
   // Load persisted query and result on mount
   useEffect(() => {
@@ -143,6 +150,11 @@ export default function SuggestPage() {
     }, 500)
     return () => clearTimeout(timer)
   }, [text])
+
+  const handleIdeaClick = (idea: string) => {
+    setText(idea)
+    saveQueryToStorage(idea)
+  }
 
   const renderOutfitItem = (item: V2Item | null, label: string) => {
     if (!item) return null
@@ -243,35 +255,71 @@ export default function SuggestPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50 py-6 sm:py-12">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 py-6 sm:py-12">
         <div className="container mx-auto px-4 sm:px-6">
           <div className="mb-6 sm:mb-8">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">Outfit Suggestions</h1>
             <p className="text-sm sm:text-base text-gray-600 leading-relaxed">Describe your occasion, and our AI will suggest intelligent outfits using semantic matching and color harmony.</p>
           </div>
 
-          <Card>
-            <form onSubmit={onSubmit} className="p-4 sm:p-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Your prompt</label>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                className="w-full h-24 sm:h-28 px-3 sm:px-4 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 resize-none"
-                placeholder="e.g., Business meeting, Gym workout, Date night"
-              />
-              <div className="mt-4">
+          <Card className="glass-panel border-white/60 shadow-xl">
+            <form onSubmit={onSubmit} className="p-4 sm:p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-primary-600 uppercase tracking-[0.2em]">Prompt the stylist</p>
+                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Tell us the vibe and intent</h2>
+                  <p className="text-xs sm:text-sm text-slate-500">We map your prompt to wardrobe items with semantic matching + color harmony.</p>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 text-white text-xs font-semibold shadow">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Instant AI styling
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Your prompt</label>
+                <div className="relative">
+                  <textarea
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    className="w-full h-28 sm:h-32 px-3 sm:px-4 py-3 text-sm sm:text-base border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 resize-none bg-white shadow-inner"
+                    placeholder="e.g., Business meeting, Gym workout, Date night"
+                  />
+                  <span className="absolute right-3 bottom-3 text-xs text-slate-400">{text.length}/240</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {promptIdeas.map((idea) => (
+                    <button
+                      type="button"
+                      key={idea}
+                      onClick={() => handleIdeaClick(idea)}
+                      className="px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 text-xs sm:text-sm text-slate-700 hover:border-slate-300 hover:-translate-y-0.5 transition-all"
+                    >
+                      {idea}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-600">
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-50 text-primary-700 font-bold">AI</span>
+                  Intent-aware, color-coordinated outfits pulled from your closet.
+                </div>
                 <Button type="submit" disabled={loading} className="w-full sm:w-auto">
                   {loading ? 'Analyzing…' : 'Get AI Suggestions'}
                 </Button>
               </div>
               {error && (
-                <div className="mt-4 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="mt-2 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-2xl">
                   <div className="flex items-start gap-2 sm:gap-3">
                     <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xs sm:text-sm font-medium text-red-800 mb-1">Unable to Generate Outfit</h3>
+                      <h3 className="text-xs sm:text-sm font-medium text-red-800 mb-1">Unable to generate outfit</h3>
                       <p className="text-xs sm:text-sm text-red-700 break-words">{error}</p>
                       {error.includes('empty') || error.includes('Not enough') ? (
                         <p className="text-xs sm:text-sm text-red-600 mt-2">

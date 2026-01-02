@@ -66,95 +66,92 @@ export default function SignupPage() {
     }
 
     return (
-        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-            <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-10 shadow-xl border border-gray-100">
-                <div className="text-center">
-                    <h2 className="mt-2 text-3xl font-extrabold text-gray-900 tracking-tight">
-                        Create an account
-                    </h2>
-                    <p className="mt-2 text-sm text-gray-600">
-                        Join Stylo to organize your wardrobe
-                    </p>
-                </div>
-
-                <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-                    {error && (
-                        <div className="rounded-md bg-red-50 p-4 border border-red-100">
-                            <div className="text-sm text-red-700">{typeof error === 'string' ? error : 'An unexpected error occurred'}</div>
-                        </div>
-                    )}
-
-                    <div className="space-y-4 rounded-md">
+        <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+            <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-center">
+                <div className="glass-panel rounded-3xl p-8 sm:p-10 border border-white/70 shadow-xl">
+                    <div className="flex items-center justify-between mb-6">
                         <div>
-                            <label htmlFor="full-name" className="sr-only">
-                                Full Name
-                            </label>
-                            <input
-                                id="full-name"
-                                name="fullName"
-                                type="text"
-                                autoComplete="name"
-                                className="relative block w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm transition-all"
-                                placeholder="Full Name (Optional)"
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                            />
+                            <p className="text-xs font-semibold text-primary-600 uppercase tracking-[0.2em]">Create account</p>
+                            <h2 className="text-3xl font-extrabold text-slate-900 leading-tight">Join STYLO</h2>
+                            <p className="text-sm text-slate-600 mt-1">Build your digital closet and get AI-crafted looks.</p>
                         </div>
-                        <div>
-                            <label htmlFor="email-address" className="sr-only">
-                                Email address
-                            </label>
-                            <input
-                                id="email-address"
-                                name="email"
-                                type="email"
-                                autoComplete="email"
-                                required
-                                className="relative block w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm transition-all"
-                                placeholder="Email address"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="password" className="sr-only">
-                                Password
-                            </label>
-                            <input
-                                id="password"
-                                name="password"
-                                type="password"
-                                autoComplete="new-password"
-                                required
-                                className="relative block w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm transition-all"
-                                placeholder="Password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="confirm-password" className="sr-only">
-                                Confirm Password
-                            </label>
-                            <input
-                                id="confirm-password"
-                                name="confirm-password"
-                                type="password"
-                                autoComplete="new-password"
-                                required
-                                className="relative block w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm transition-all"
-                                placeholder="Confirm Password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                            />
-                        </div>
+                        <div className="px-3 py-1.5 rounded-full bg-primary-50 text-primary-700 text-xs font-semibold border border-primary-100">1 min</div>
                     </div>
 
-                    <div>
+                    <form className="space-y-5" onSubmit={handleSubmit}>
+                        {error && (
+                            <div className="rounded-2xl bg-red-50 p-4 border border-red-100 text-sm text-red-700 flex items-start gap-3">
+                                <svg className="w-5 h-5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div>{typeof error === 'string' ? error : 'An unexpected error occurred'}</div>
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <label htmlFor="full-name" className="text-sm font-medium text-slate-700">
+                                    Full Name <span className="text-xs text-slate-400">(optional)</span>
+                                </label>
+                                <input
+                                    id="full-name"
+                                    name="fullName"
+                                    type="text"
+                                    autoComplete="name"
+                                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 focus:outline-none transition-all bg-white/70"
+                                    placeholder="Alex Fashioner"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label htmlFor="email-address" className="text-sm font-medium text-slate-700">Email address</label>
+                                <input
+                                    id="email-address"
+                                    name="email"
+                                    type="email"
+                                    autoComplete="email"
+                                    required
+                                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 focus:outline-none transition-all bg-white/70"
+                                    placeholder="you@example.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label htmlFor="password" className="text-sm font-medium text-slate-700">Password</label>
+                                <input
+                                    id="password"
+                                    name="password"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    required
+                                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 focus:outline-none transition-all bg-white/70"
+                                    placeholder="••••••••"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label htmlFor="confirm-password" className="text-sm font-medium text-slate-700">Confirm Password</label>
+                                <input
+                                    id="confirm-password"
+                                    name="confirm-password"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    required
+                                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 focus:outline-none transition-all bg-white/70"
+                                    placeholder="••••••••"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className={`group relative flex w-full justify-center rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all ${isLoading ? 'opacity-70 cursor-not-allowed' : ''
+                            className={`group relative flex w-full justify-center rounded-xl bg-slate-900 px-4 py-3 text-base font-semibold text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:ring-offset-2 transition-all ${isLoading ? 'opacity-70 cursor-not-allowed' : ''
                                 }`}
                         >
                             {isLoading ? (
@@ -169,14 +166,39 @@ export default function SignupPage() {
                                 'Sign up'
                             )}
                         </button>
-                    </div>
-                </form>
+                    </form>
 
-                <div className="text-center text-sm">
-                    <span className="text-gray-500">Already have an account? </span>
-                    <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500 hover:underline">
-                        Sign in
-                    </Link>
+                    <div className="mt-6 text-center text-sm">
+                        <span className="text-slate-500">Already have an account? </span>
+                        <Link href="/login" className="font-semibold text-primary-700 hover:text-primary-800 hover:underline">
+                            Sign in
+                        </Link>
+                    </div>
+                </div>
+
+                <div className="hidden lg:block glass-panel rounded-3xl p-10 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 opacity-90" />
+                    <div className="relative text-white">
+                        <p className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold border border-white/10 mb-6">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            Modern wardrobe OS
+                        </p>
+                        <h3 className="text-3xl font-extrabold leading-tight">Less scrolling.<br />More styling.</h3>
+                        <p className="mt-3 text-sm text-slate-200 leading-relaxed max-w-md">Save your favorite looks, generate AI outfits, and keep every piece organized with smart filters and inline actions.</p>
+                        <div className="mt-6 grid grid-cols-2 gap-3">
+                            {[
+                                { title: 'Smart filters', desc: 'Search by color, type, and intent instantly.' },
+                                { title: 'Saved outfits', desc: 'Keep curated fits ready for every occasion.' },
+                                { title: 'AI suggestions', desc: 'Semantic, color-aware recommendations.' },
+                                { title: 'Fast actions', desc: 'Add, delete, and favorite with one tap.' },
+                            ].map((feature) => (
+                                <div key={feature.title} className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                                    <p className="text-sm font-semibold">{feature.title}</p>
+                                    <p className="text-xs text-slate-200 mt-1">{feature.desc}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
