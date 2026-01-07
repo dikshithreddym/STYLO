@@ -71,16 +71,16 @@ export default function SignupPage() {
                 <div className="glass-panel rounded-3xl p-8 sm:p-10 border border-white/70 shadow-xl">
                     <div className="flex items-center justify-between mb-6">
                         <div>
-                            <p className="text-xs font-semibold text-primary-600 uppercase tracking-[0.2em]">Create account</p>
-                            <h2 className="text-3xl font-extrabold text-slate-900 leading-tight">Join STYLO</h2>
-                            <p className="text-sm text-slate-600 mt-1">Build your digital closet and get AI-crafted looks.</p>
+                            <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-[0.2em]">Create account</p>
+                            <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white leading-tight">Join STYLO</h2>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Build your digital closet and get AI-crafted looks.</p>
                         </div>
-                        <div className="px-3 py-1.5 rounded-full bg-primary-50 text-primary-700 text-xs font-semibold border border-primary-100">1 min</div>
+                        <div className="px-3 py-1.5 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 text-xs font-semibold border border-primary-100 dark:border-primary-800">1 min</div>
                     </div>
 
                     <form className="space-y-5" onSubmit={handleSubmit}>
                         {error && (
-                            <div className="rounded-2xl bg-red-50 p-4 border border-red-100 text-sm text-red-700 flex items-start gap-3">
+                            <div className="rounded-2xl bg-red-50 dark:bg-red-900/30 p-4 border border-red-100 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-start gap-3">
                                 <svg className="w-5 h-5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -90,57 +90,57 @@ export default function SignupPage() {
 
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <label htmlFor="full-name" className="text-sm font-medium text-slate-700">
-                                    Full Name <span className="text-xs text-slate-400">(optional)</span>
+                                <label htmlFor="full-name" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    Full Name <span className="text-xs text-slate-400 dark:text-slate-500">(optional)</span>
                                 </label>
                                 <input
                                     id="full-name"
                                     name="fullName"
                                     type="text"
                                     autoComplete="name"
-                                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 focus:outline-none transition-all bg-white/70"
+                                    className="block w-full rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-800 focus:outline-none transition-all bg-white/70 dark:bg-slate-800/70"
                                     placeholder="Alex Fashioner"
                                     value={fullName}
                                     onChange={(e) => setFullName(e.target.value)}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label htmlFor="email-address" className="text-sm font-medium text-slate-700">Email address</label>
+                                <label htmlFor="email-address" className="text-sm font-medium text-slate-700 dark:text-slate-300">Email address</label>
                                 <input
                                     id="email-address"
                                     name="email"
                                     type="email"
                                     autoComplete="email"
                                     required
-                                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 focus:outline-none transition-all bg-white/70"
+                                    className="block w-full rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-800 focus:outline-none transition-all bg-white/70 dark:bg-slate-800/70"
                                     placeholder="you@example.com"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label htmlFor="password" className="text-sm font-medium text-slate-700">Password</label>
+                                <label htmlFor="password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
                                 <input
                                     id="password"
                                     name="password"
                                     type="password"
                                     autoComplete="new-password"
                                     required
-                                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 focus:outline-none transition-all bg-white/70"
+                                    className="block w-full rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-800 focus:outline-none transition-all bg-white/70 dark:bg-slate-800/70"
                                     placeholder="••••••••"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label htmlFor="confirm-password" className="text-sm font-medium text-slate-700">Confirm Password</label>
+                                <label htmlFor="confirm-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">Confirm Password</label>
                                 <input
                                     id="confirm-password"
                                     name="confirm-password"
                                     type="password"
                                     autoComplete="new-password"
                                     required
-                                    className="block w-full rounded-xl border border-slate-200 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 focus:outline-none transition-all bg-white/70"
+                                    className="block w-full rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-800 focus:outline-none transition-all bg-white/70 dark:bg-slate-800/70"
                                     placeholder="••••••••"
                                     value={confirmPassword}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
@@ -151,7 +151,7 @@ export default function SignupPage() {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className={`group relative flex w-full justify-center rounded-xl bg-slate-900 px-4 py-3 text-base font-semibold text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:ring-offset-2 transition-all ${isLoading ? 'opacity-70 cursor-not-allowed' : ''
+                            className={`group relative flex w-full justify-center rounded-xl bg-slate-900 dark:bg-primary-600 px-4 py-3 text-base font-semibold text-white hover:bg-slate-800 dark:hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-300 focus:ring-offset-2 dark:focus:ring-offset-slate-800 transition-all ${isLoading ? 'opacity-70 cursor-not-allowed' : ''
                                 }`}
                         >
                             {isLoading ? (
@@ -169,8 +169,8 @@ export default function SignupPage() {
                     </form>
 
                     <div className="mt-6 text-center text-sm">
-                        <span className="text-slate-500">Already have an account? </span>
-                        <Link href="/login" className="font-semibold text-primary-700 hover:text-primary-800 hover:underline">
+                        <span className="text-slate-500 dark:text-slate-400">Already have an account? </span>
+                        <Link href="/login" className="font-semibold text-primary-700 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 hover:underline">
                             Sign in
                         </Link>
                     </div>

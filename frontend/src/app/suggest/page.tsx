@@ -160,8 +160,8 @@ export default function SuggestPage() {
     if (!item) return null
 
     return (
-      <div key={item.id} className="group bg-white rounded-xl sm:rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
-        <div className="relative h-48 sm:h-56 md:h-64 bg-gradient-to-br from-gray-100 to-gray-200">
+      <div key={item.id} className="group bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl shadow-sm dark:shadow-slate-900/50 hover:shadow-xl dark:hover:shadow-slate-900/70 transition-all duration-300 border border-gray-100 dark:border-slate-700 overflow-hidden">
+        <div className="relative h-48 sm:h-56 md:h-64 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-slate-700 dark:to-slate-600">
           {item.image_url && (
             <Image
               src={item.image_url}
@@ -176,16 +176,16 @@ export default function SuggestPage() {
           </div>
         </div>
         <div className="p-3 sm:p-4">
-          <h3 className="font-semibold text-base sm:text-lg text-gray-900 line-clamp-2">{item.name}</h3>
+          <h3 className="font-semibold text-base sm:text-lg text-gray-900 dark:text-white line-clamp-2">{item.name}</h3>
           <div className="flex items-center gap-2 mt-1">
             {item.color && item.color !== 'Unknown' && (
               <>
-                <span className="inline-block w-3 h-3 rounded-full border border-gray-300 shadow-sm flex-shrink-0" style={{ backgroundColor: getColorHex(item.color) }}></span>
-                <p className="text-gray-600 text-xs sm:text-sm truncate">{item.color}</p>
+                <span className="inline-block w-3 h-3 rounded-full border border-gray-300 dark:border-slate-600 shadow-sm flex-shrink-0" style={{ backgroundColor: getColorHex(item.color) }}></span>
+                <p className="text-gray-600 dark:text-slate-400 text-xs sm:text-sm truncate">{item.color}</p>
               </>
             )}
           </div>
-          <span className="inline-block mt-2 px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-md sm:rounded-lg font-medium">{item.category}</span>
+          <span className="inline-block mt-2 px-2 py-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 text-xs rounded-md sm:rounded-lg font-medium">{item.category}</span>
         </div>
       </div>
     )
@@ -213,9 +213,9 @@ export default function SuggestPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
           <div className="flex items-center gap-3">
             {index > 0 ? (
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900">Alternative #{index}</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Alternative #{index}</h3>
             ) : (
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900">Top Suggestion</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Top Suggestion</h3>
             )}
             <Button
               variant="secondary"
@@ -244,8 +244,8 @@ export default function SuggestPage() {
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
             <div className="flex-1 min-w-0">
-              <h4 className="text-xs sm:text-sm font-semibold text-gray-900 mb-1">Why this outfit?</h4>
-              <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">{rationale}</p>
+              <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white mb-1">Why this outfit?</h4>
+              <p className="text-xs sm:text-sm text-gray-700 dark:text-slate-300 leading-relaxed">{rationale}</p>
             </div>
           </div>
         </div>
@@ -255,20 +255,20 @@ export default function SuggestPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 py-6 sm:py-12">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 py-6 sm:py-12">
         <div className="container mx-auto px-4 sm:px-6">
           <div className="mb-6 sm:mb-8">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2">Outfit Suggestions</h1>
-            <p className="text-sm sm:text-base text-gray-600 leading-relaxed">Describe your occasion, and our AI will suggest intelligent outfits using semantic matching and color harmony.</p>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">Outfit Suggestions</h1>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-slate-400 leading-relaxed">Describe your occasion, and our AI will suggest intelligent outfits using semantic matching and color harmony.</p>
           </div>
 
           <Card className="glass-panel border-white/60 shadow-xl">
             <form onSubmit={onSubmit} className="p-4 sm:p-6 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold text-primary-600 uppercase tracking-[0.2em]">Prompt the stylist</p>
-                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Tell us the vibe and intent</h2>
-                  <p className="text-xs sm:text-sm text-slate-500">We map your prompt to wardrobe items with semantic matching + color harmony.</p>
+                  <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-[0.2em]">Prompt the stylist</p>
+                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Tell us the vibe and intent</h2>
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">We map your prompt to wardrobe items with semantic matching + color harmony.</p>
                 </div>
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 text-white text-xs font-semibold shadow">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -279,15 +279,15 @@ export default function SuggestPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Your prompt</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Your prompt</label>
                 <div className="relative">
                   <textarea
                     value={text}
                     onChange={(e) => setText(e.target.value)}
-                    className="w-full h-28 sm:h-32 px-3 sm:px-4 py-3 text-sm sm:text-base border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 resize-none bg-white shadow-inner"
+                    className="w-full h-28 sm:h-32 px-3 sm:px-4 py-3 text-sm sm:text-base border dark:border-slate-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 dark:text-white resize-none bg-white dark:bg-slate-800 shadow-inner placeholder-slate-400 dark:placeholder-slate-500"
                     placeholder="e.g., Business meeting, Gym workout, Date night"
                   />
-                  <span className="absolute right-3 bottom-3 text-xs text-slate-400">{text.length}/240</span>
+                  <span className="absolute right-3 bottom-3 text-xs text-slate-400 dark:text-slate-500">{text.length}/240</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {promptIdeas.map((idea) => (
@@ -295,7 +295,7 @@ export default function SuggestPage() {
                       type="button"
                       key={idea}
                       onClick={() => handleIdeaClick(idea)}
-                      className="px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 text-xs sm:text-sm text-slate-700 hover:border-slate-300 hover:-translate-y-0.5 transition-all"
+                      className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-xs sm:text-sm text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-500 hover:-translate-y-0.5 transition-all"
                     >
                       {idea}
                     </button>

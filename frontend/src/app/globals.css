@@ -7,6 +7,11 @@
   --background: #f6f8fb;
 }
 
+.dark {
+  --foreground: #f1f5f9;
+  --background: #0f172a;
+}
+
 body {
   color: var(--foreground);
   background: radial-gradient(circle at 10% 20%, rgba(14, 165, 233, 0.08), transparent 25%),
@@ -15,6 +20,15 @@ body {
     linear-gradient(180deg, #f8fbff 0%, #f3f6fb 35%, #eef2f7 100%);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.dark body,
+html.dark body {
+  background: radial-gradient(circle at 10% 20%, rgba(14, 165, 233, 0.15), transparent 25%),
+    radial-gradient(circle at 90% 10%, rgba(129, 140, 248, 0.12), transparent 28%),
+    radial-gradient(circle at 70% 60%, rgba(14, 165, 233, 0.1), transparent 30%),
+    linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
 }
 
 #__next,
@@ -27,6 +41,12 @@ main {
   backdrop-filter: blur(16px);
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.dark .glass-panel {
+  background: rgba(30, 41, 59, 0.85);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(51, 65, 85, 0.7);
 }
 
 .card-grid {
@@ -44,4 +64,23 @@ main {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }

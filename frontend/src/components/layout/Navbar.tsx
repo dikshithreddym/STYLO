@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 
 const Navbar = () => {
   const pathname = usePathname()
@@ -11,7 +12,7 @@ const Navbar = () => {
   const isActive = (path: string) => pathname === path
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-2xl border-b border-white/60 shadow-[0_10px_50px_-30px_rgba(15,23,42,0.6)]">
+    <nav className="sticky top-0 z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl border-b border-white/60 dark:border-slate-700/60 shadow-[0_10px_50px_-30px_rgba(15,23,42,0.6)] dark:shadow-[0_10px_50px_-30px_rgba(0,0,0,0.8)] transition-colors duration-300">
       <div className="container mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
@@ -20,8 +21,8 @@ const Navbar = () => {
               <span className="text-white font-extrabold text-xl">S</span>
             </div>
             <div className="hidden sm:flex flex-col leading-tight">
-              <span className="text-lg font-extrabold text-slate-900 tracking-tight">STYLO</span>
-              <span className="text-[11px] font-medium text-slate-500">Smart Wardrobe OS</span>
+              <span className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">STYLO</span>
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Smart Wardrobe OS</span>
             </div>
           </Link>
 
@@ -30,8 +31,8 @@ const Navbar = () => {
             <Link
               href="/wardrobe"
               className={`group px-3 sm:px-4 py-2 rounded-full transition-all duration-200 text-sm sm:text-base inline-flex items-center gap-2 ${isActive('/wardrobe')
-                ? 'bg-slate-900 text-white shadow-md shadow-primary-200/60'
-                : 'text-gray-600 hover:bg-white hover:text-gray-900 border border-transparent hover:border-slate-200'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md shadow-primary-200/60 dark:shadow-slate-900/60'
+                : 'text-gray-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border border-transparent hover:border-slate-200 dark:hover:border-slate-600'
                 }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -42,8 +43,8 @@ const Navbar = () => {
             <Link
               href="/suggest"
               className={`group px-3 sm:px-4 py-2 rounded-full transition-all duration-200 text-sm sm:text-base inline-flex items-center gap-2 ${isActive('/suggest')
-                ? 'bg-slate-900 text-white shadow-md shadow-primary-200/60'
-                : 'text-gray-600 hover:bg-white hover:text-gray-900 border border-transparent hover:border-slate-200'
+                ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md shadow-primary-200/60 dark:shadow-slate-900/60'
+                : 'text-gray-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white border border-transparent hover:border-slate-200 dark:hover:border-slate-600'
                 }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -52,20 +53,23 @@ const Navbar = () => {
               <span className="hidden sm:inline font-semibold">Suggest</span>
             </Link>
 
-            <div className="hidden sm:block h-6 w-px bg-gradient-to-b from-transparent via-slate-200 to-transparent mx-1 sm:mx-2"></div>
+            {/* Theme Toggle */}
+            <ThemeToggle />
+
+            <div className="hidden sm:block h-6 w-px bg-gradient-to-b from-transparent via-slate-200 dark:via-slate-600 to-transparent mx-1 sm:mx-2"></div>
 
             {user ? (
               <div className="flex items-center gap-2 sm:gap-4">
                 <div className="hidden sm:flex flex-col items-end">
-                  <span className="text-sm font-semibold text-gray-900">{user.full_name || user.email.split('@')[0]}</span>
-                  <span className="text-xs text-gray-500">Active member</span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">{user.full_name || user.email.split('@')[0]}</span>
+                  <span className="text-xs text-gray-500 dark:text-slate-400">Active member</span>
                 </div>
                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-200 to-primary-500 text-slate-900 font-bold flex items-center justify-center shadow-sm">
                   {user.email.charAt(0).toUpperCase()}
                 </div>
                 <button
                   onClick={logout}
-                  className="px-3 sm:px-4 py-2 rounded-full text-sm font-semibold text-slate-700 bg-white border border-slate-200 hover:border-slate-300 hover:-translate-y-0.5 transition-all shadow-sm"
+                  className="px-3 sm:px-4 py-2 rounded-full text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500 hover:-translate-y-0.5 transition-all shadow-sm"
                 >
                   Sign Out
                 </button>
@@ -74,13 +78,13 @@ const Navbar = () => {
               <div className="flex items-center gap-2">
                 <Link
                   href="/login"
-                  className="px-3 sm:px-4 py-2 rounded-full text-sm font-semibold text-slate-700 bg-white border border-slate-200 hover:border-slate-300 transition-all shadow-sm"
+                  className="px-3 sm:px-4 py-2 rounded-full text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-slate-300 dark:hover:border-slate-500 transition-all shadow-sm"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/signup"
-                  className="hidden sm:block px-4 py-2 rounded-full text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-all shadow-md"
+                  className="hidden sm:block px-4 py-2 rounded-full text-sm font-semibold text-white bg-slate-900 dark:bg-primary-600 hover:bg-slate-800 dark:hover:bg-primary-700 transition-all shadow-md"
                 >
                   Sign Up
                 </Link>
