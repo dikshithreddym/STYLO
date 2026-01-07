@@ -160,32 +160,30 @@ export default function SuggestPage() {
     if (!item) return null
 
     return (
-      <div key={item.id} className="group bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl shadow-sm dark:shadow-slate-900/50 hover:shadow-xl dark:hover:shadow-slate-900/70 transition-all duration-300 border border-gray-100 dark:border-slate-700 overflow-hidden">
-        <div className="relative h-48 sm:h-56 md:h-64 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-slate-700 dark:to-slate-600">
+      <div key={item.id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="relative aspect-square bg-slate-100 dark:bg-slate-700">
           {item.image_url && (
             <Image
               src={item.image_url}
-              alt={`${item.name}`}
+              alt={item.name}
               fill
-              className="object-cover group-hover:scale-110 transition-transform duration-500"
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 20vw"
+              className="object-cover"
+              sizes="(max-width: 640px) 50vw, 20vw"
             />
           )}
-          <div className="absolute top-2 left-2 px-2 py-1 bg-black/70 text-white text-xs font-medium rounded-md sm:rounded-lg backdrop-blur-sm">
+          <span className="absolute top-2 left-2 px-2 py-0.5 bg-slate-900/80 text-white text-xs font-medium rounded">
             {label}
-          </div>
+          </span>
         </div>
-        <div className="p-3 sm:p-4">
-          <h3 className="font-semibold text-base sm:text-lg text-gray-900 dark:text-white line-clamp-2">{item.name}</h3>
-          <div className="flex items-center gap-2 mt-1">
-            {item.color && item.color !== 'Unknown' && (
-              <>
-                <span className="inline-block w-3 h-3 rounded-full border border-gray-300 dark:border-slate-600 shadow-sm flex-shrink-0" style={{ backgroundColor: getColorHex(item.color) }}></span>
-                <p className="text-gray-600 dark:text-slate-400 text-xs sm:text-sm truncate">{item.color}</p>
-              </>
-            )}
-          </div>
-          <span className="inline-block mt-2 px-2 py-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300 text-xs rounded-md sm:rounded-lg font-medium">{item.category}</span>
+        <div className="p-3">
+          <h3 className="font-medium text-sm text-slate-900 dark:text-white line-clamp-1">{item.name}</h3>
+          {item.color && item.color !== 'Unknown' && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-2.5 h-2.5 rounded-full border border-slate-200 dark:border-slate-600" style={{ backgroundColor: getColorHex(item.color) }} />
+              <span className="text-xs text-slate-500 dark:text-slate-400">{item.color}</span>
+            </div>
+          )}
+          <span className="inline-block mt-2 px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded capitalize">{item.category}</span>
         </div>
       </div>
     )
@@ -202,51 +200,46 @@ export default function SuggestPage() {
 
     if (items.length === 0) return null
 
-    // Ensure score is a number and handle edge cases
     const score = typeof outfit.score === 'number' ? outfit.score : parseFloat(outfit.score as any) || 0
-    const scoreColor = score >= 90 ? 'text-green-600' : score >= 70 ? 'text-yellow-600' : 'text-orange-600'
-    const scoreBg = score >= 90 ? 'bg-green-50 border-green-200' : score >= 70 ? 'bg-yellow-50 border-yellow-200' : 'bg-orange-50 border-orange-200'
+    const scoreColor = score >= 90 ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30' : score >= 70 ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30' : 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30'
     const rationale = outfit.rationale || 'Outfit selected from your wardrobe.'
 
     return (
-      <div key={index} className="mb-6 sm:mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
+      <div key={index} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        {/* Header */}
+        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {index > 0 ? (
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Alternative #{index}</h3>
-            ) : (
-              <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">Top Suggestion</h3>
-            )}
+            <h3 className="font-semibold text-slate-900 dark:text-white">
+              {index === 0 ? 'Top Pick' : `Alternative ${index}`}
+            </h3>
             <Button
               variant="secondary"
-              className="text-xs px-2 py-1 h-auto"
+              size="sm"
               onClick={() => handleSaveOutfit(outfit, index)}
               disabled={savingOutfitIndex === index}
             >
-              {savingOutfitIndex === index ? 'Saving...' : 'Save Outfit'}
+              {savingOutfitIndex === index ? 'Saving...' : 'Save'}
             </Button>
           </div>
-          <div className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold border ${scoreBg} ${scoreColor} self-start sm:self-auto`}>
-            {score >= 90 && (
-              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-            )}
-            <span>{score.toFixed(0)}% Match</span>
+          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${scoreColor}`}>
+            {score.toFixed(0)}% Match
+          </span>
+        </div>
+
+        {/* Items Grid */}
+        <div className="p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            {items.map(({ item, label }) => renderOutfitItem(item, label))}
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6 mb-3 sm:mb-4">
-          {items.map(({ item, label }) => renderOutfitItem(item, label))}
-        </div>
-        <div className={`mt-3 sm:mt-4 p-3 sm:p-4 rounded-lg border ${scoreBg}`}>
-          <div className="flex items-start gap-2 sm:gap-3">
-            <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-            <div className="flex-1 min-w-0">
-              <h4 className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white mb-1">Why this outfit?</h4>
-              <p className="text-xs sm:text-sm text-gray-700 dark:text-slate-300 leading-relaxed">{rationale}</p>
-            </div>
+
+        {/* Rationale */}
+        <div className="px-4 pb-4">
+          <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              <span className="font-medium text-slate-900 dark:text-white">Why this outfit? </span>
+              {rationale}
+            </p>
           </div>
         </div>
       </div>
@@ -255,114 +248,97 @@ export default function SuggestPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 py-6 sm:py-12">
-        <div className="container mx-auto px-4 sm:px-6">
-          <div className="mb-6 sm:mb-8">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">Outfit Suggestions</h1>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-slate-400 leading-relaxed">Describe your occasion, and our AI will suggest intelligent outfits using semantic matching and color harmony.</p>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 py-6 sm:py-8">
+        <div className="container mx-auto px-4 sm:px-6 max-w-5xl">
+          {/* Header */}
+          <div className="mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">Outfit Suggestions</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Describe your occasion and get AI-powered outfit recommendations</p>
           </div>
 
-          <Card className="glass-panel border-white/60 shadow-xl">
-            <form onSubmit={onSubmit} className="p-4 sm:p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-[0.2em]">Prompt the stylist</p>
-                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Tell us the vibe and intent</h2>
-                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">We map your prompt to wardrobe items with semantic matching + color harmony.</p>
-                </div>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 text-white text-xs font-semibold shadow">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Instant AI styling
-                </div>
+          {/* Prompt Card */}
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 mb-6">
+            <form onSubmit={onSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  What's the occasion?
+                </label>
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  className="w-full h-24 px-4 py-3 text-sm border border-slate-200 dark:border-slate-600 rounded-xl bg-slate-50 dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  placeholder="e.g., Business meeting, Casual dinner, Beach day..."
+                />
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Your prompt</label>
-                <div className="relative">
-                  <textarea
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    className="w-full h-28 sm:h-32 px-3 sm:px-4 py-3 text-sm sm:text-base border dark:border-slate-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 dark:text-white resize-none bg-white dark:bg-slate-800 shadow-inner placeholder-slate-400 dark:placeholder-slate-500"
-                    placeholder="e.g., Business meeting, Gym workout, Date night"
-                  />
-                  <span className="absolute right-3 bottom-3 text-xs text-slate-400 dark:text-slate-500">{text.length}/240</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {promptIdeas.map((idea) => (
-                    <button
-                      type="button"
-                      key={idea}
-                      onClick={() => handleIdeaClick(idea)}
-                      className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-xs sm:text-sm text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-slate-500 hover:-translate-y-0.5 transition-all"
-                    >
-                      {idea}
-                    </button>
-                  ))}
-                </div>
+              {/* Quick Ideas */}
+              <div className="flex flex-wrap gap-2">
+                {promptIdeas.map((idea) => (
+                  <button
+                    type="button"
+                    key={idea}
+                    onClick={() => handleIdeaClick(idea)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                  >
+                    {idea}
+                  </button>
+                ))}
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-600">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-50 text-primary-700 font-bold">AI</span>
-                  Intent-aware, color-coordinated outfits pulled from your closet.
-                </div>
-                <Button type="submit" disabled={loading} className="w-full sm:w-auto">
-                  {loading ? 'Analyzing…' : 'Get AI Suggestions'}
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-xs text-slate-400">{text.length}/240 characters</span>
+                <Button type="submit" disabled={loading || !text.trim()}>
+                  {loading ? 'Analyzing...' : 'Get Suggestions'}
                 </Button>
               </div>
-              {error && (
-                <div className="mt-2 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-2xl">
-                  <div className="flex items-start gap-2 sm:gap-3">
-                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-xs sm:text-sm font-medium text-red-800 mb-1">Unable to generate outfit</h3>
-                      <p className="text-xs sm:text-sm text-red-700 break-words">{error}</p>
-                      {error.includes('empty') || error.includes('Not enough') ? (
-                        <p className="text-xs sm:text-sm text-red-600 mt-2">
-                          💡 Tip: <a href="/wardrobe" className="underline font-medium hover:text-red-800">Add more items to your wardrobe</a> to get outfit suggestions.
-                        </p>
-                      ) : null}
-                    </div>
+            </form>
+
+            {error && (
+              <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-red-800 dark:text-red-200">{error}</p>
+                    {(error.includes('empty') || error.includes('Not enough')) && (
+                      <p className="text-sm text-red-600 dark:text-red-300 mt-1">
+                        <a href="/wardrobe" className="underline hover:no-underline">Add more items to your wardrobe</a> to get suggestions.
+                      </p>
+                    )}
                   </div>
                 </div>
-              )}
-            </form>
-          </Card>
+              </div>
+            )}
+          </div>
 
           {result && (
-            <div className="mt-6 sm:mt-8 md:mt-10">
-              <div className="mb-4 sm:mb-6">
-                <div className="flex flex-col gap-3 sm:gap-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900">AI-Powered Suggestions</h2>
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-full text-xs sm:text-sm font-medium shadow-md self-start sm:self-auto">
-                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                        <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-                      </svg>
-                      <span className="hidden xs:inline">Intent: </span>{result.intent}
-                    </div>
-                  </div>
-                  <p className="text-gray-600 text-xs sm:text-sm md:text-base leading-relaxed">
-                    Based on your query, our AI detected a <span className="font-semibold text-gray-900">{result.intent}</span> occasion and selected items using semantic matching, color harmony, and intent-aware rules.
+            <div>
+              {/* Results Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Suggested Outfits</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Detected occasion: <span className="font-medium text-slate-700 dark:text-slate-300">{result.intent}</span>
                   </p>
                 </div>
+                <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 text-xs font-medium rounded-full">
+                  {result.outfits.length} outfit{result.outfits.length !== 1 ? 's' : ''}
+                </span>
               </div>
 
               {result.outfits.length === 0 ? (
-                <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8 md:p-12 text-center">
-                  <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="text-gray-600 text-base sm:text-lg">No suitable items found in your wardrobe.</p>
-                  <p className="text-gray-500 text-xs sm:text-sm mt-2">Try adding more items or adjusting your prompt.</p>
+                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-12 text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <p className="text-slate-900 dark:text-white font-medium">No matching outfits found</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Try adding more items or adjusting your prompt</p>
                 </div>
               ) : (
-                <div>
+                <div className="space-y-6">
                   {result.outfits.map((outfit, idx) => renderOutfit(outfit, idx))}
                 </div>
               )}

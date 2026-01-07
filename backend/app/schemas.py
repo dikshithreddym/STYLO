@@ -91,6 +91,7 @@ class SavedOutfitCreate(BaseModel):
 
 class SavedOutfitResponse(SavedOutfitCreate):
     id: int
+    is_pinned: int = Field(0, description="Whether the outfit is pinned (0=no, 1=yes)")
     created_at: datetime
     
     class Config:

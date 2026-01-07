@@ -89,4 +89,5 @@ class SavedOutfit(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(255), nullable=True) # Optional name for the outfit
     items = Column(JSON, nullable=False) # JSON object with keys like 'top', 'bottom', etc. containing item IDs or details
+    is_pinned = Column(Integer, default=0, nullable=False) # 0 = not pinned, 1 = pinned
     created_at = Column(DateTime, default=datetime.utcnow)

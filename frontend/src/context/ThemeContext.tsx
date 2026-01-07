@@ -15,7 +15,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 const THEME_STORAGE_KEY = 'stylo.theme'
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-    const [theme, setThemeState] = useState<Theme>('light')
+    const [theme, setThemeState] = useState<Theme>('dark')
     const [mounted, setMounted] = useState(false)
 
     // Load theme from localStorage on mount
@@ -26,9 +26,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (savedTheme) {
             setThemeState(savedTheme)
         } else {
-            // Check system preference
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-            setThemeState(prefersDark ? 'dark' : 'light')
+            // Default to dark mode
+            setThemeState('dark')
         }
     }, [])
 
@@ -58,7 +57,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Prevent flash of wrong theme
     if (!mounted) {
         return (
-            <ThemeContext.Provider value={{ theme: 'light', toggleTheme, setTheme }}>
+            <ThemeContext.Provider value={{ theme: 'dark', toggleTheme, setTheme }}>
                 {children}
             </ThemeContext.Provider>
         )

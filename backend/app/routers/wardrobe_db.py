@@ -270,8 +270,22 @@ async def save_outfit(payload: SavedOutfitCreate, db: Session = Depends(get_db),
 
 @router.get("/outfits", response_model=List[SavedOutfitResponse])
 async def get_saved_outfits(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Get all saved outfits for the current user"""
-    return db.query(SavedOutfit).filter(SavedOutfit.user_id == current_user.id).order_by(SavedOutfit.created_at.desc()).all()
+    """Get all saved outfits for the current user, pinned outfits first"""
+    return db.query(SavedOutfit).filter(SavedOutfit.user_id == current_user.id).order_by(SavedOutfit.is_pinned.desc(), SavedOutfit.created_at.desc()).all()
+
+
+@router.patch("/outfits/{outfit_id}/pin", response_model=SavedOutfitResponse)
+async def toggle_outfit_pin(outfit_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Toggle the pinned status of a saved outfit"""
+    outfit = db.query(SavedOutfit).filter(SavedOutfit.id == outfit_id, SavedOutfit.user_id == current_user.id).first()
+    if not outfit:
+        raise HTTPException(status_code=404, detail="Outfit not found")
+    
+    # Toggle the pin status
+    outfit.is_pinned = 0 if outfit.is_pinned else 1
+    db.commit()
+    db.refresh(outfit)
+    return outfit
 
 
 @router.delete("/outfits/{outfit_id}", status_code=204)

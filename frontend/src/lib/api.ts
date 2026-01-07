@@ -120,6 +120,7 @@ export interface SavedOutfit {
   user_id: number
   name?: string
   items: Record<string, V2Item | null>
+  is_pinned: number
   created_at: string
 }
 
@@ -136,5 +137,10 @@ export const outfitsAPI = {
 
   delete: async (id: number): Promise<void> => {
     await apiClient.delete(`/wardrobe/outfits/${id}`)
+  },
+
+  togglePin: async (id: number): Promise<SavedOutfit> => {
+    const response = await apiClient.patch(`/wardrobe/outfits/${id}/pin`)
+    return response.data
   }
 }
