@@ -22,6 +22,25 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          id="theme-init"
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+              try {
+                const key = 'stylo.theme';
+                const saved = localStorage.getItem(key);
+                const theme = saved ? saved : 'dark';
+                const root = document.documentElement;
+                if (theme === 'dark') root.classList.add('dark');
+                else root.classList.remove('dark');
+              } catch (e) {
+                document.documentElement.classList.add('dark');
+              }
+            })();`
+          }}
+        />
+      </head>
       <body className={`${inter.className} bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300`}>
         <ThemeProvider>
           <ToastProvider>
