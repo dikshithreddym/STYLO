@@ -14,7 +14,7 @@ interface User {
 interface AuthContextType {
     user: User | null
     loading: boolean
-    login: (token: string) => void
+    login: (token: string) => Promise<void>
     logout: () => void
     checkAuth: () => Promise<void>
 }
@@ -52,9 +52,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         checkAuth()
     }, [])
 
-    const login = (token: string) => {
+    const login = async (token: string) => {
         localStorage.setItem('token', token)
-        checkAuth()
+        await checkAuth()
         router.push('/wardrobe')
     }
 

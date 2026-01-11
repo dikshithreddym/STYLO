@@ -28,7 +28,7 @@ export default function LoginPage() {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
             })
-            login(response.data.access_token)
+            await login(response.data.access_token)
         } catch (err: any) {
             console.error(err)
             const detail = err.response?.data?.detail
