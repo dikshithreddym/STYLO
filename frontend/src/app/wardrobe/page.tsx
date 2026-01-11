@@ -9,6 +9,7 @@ import { wardrobeAPI, WardrobeItem, outfitsAPI, SavedOutfit, V2Item } from '@/li
 import { getFavorites, toggleFavorite } from '@/lib/storage'
 import { getColorHex } from '@/lib/colors'
 import AddItemModal from '@/components/modals/AddItemModal'
+import OutfitDetailModal from '@/components/modals/OutfitDetailModal'
 import { wardrobeCache, filterStateCache } from '@/lib/wardrobeCache'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 
@@ -23,6 +24,7 @@ export default function WardrobePage() {
   // Saved Outfits
   const [savedOutfits, setSavedOutfits] = useState<SavedOutfit[]>([])
   const [activeTab, setActiveTab] = useState<'items' | 'outfits'>('items')
+  const [selectedOutfit, setSelectedOutfit] = useState<SavedOutfit | null>(null)
 
   // Filter states
   const [q, setQ] = useState('')
@@ -588,7 +590,11 @@ export default function WardrobePage() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {savedOutfits.map(outfit => (
-                    <div key={outfit.id} className={`bg-white dark:bg-slate-800 rounded-xl border overflow-hidden transition-all hover:shadow-md ${outfit.is_pinned ? 'border-primary-400 dark:border-primary-500' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div 
+                      key={outfit.id} 
+                      onClick={() => setSelectedOutfit(outfit)}
+                      className={`bg-white dark:bg-slate-800 rounded-xl border overflow-hidden transition-all hover:shadow-md cursor-pointer ${outfit.is_pinned ? 'border-primary-400 dark:border-primary-500' : 'border-slate-200 dark:border-slate-700'}`}
+                    >
                       {/* Header */}
                       <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -606,7 +612,7 @@ export default function WardrobePage() {
                         </div>
                         <div className="flex items-center gap-1">
                           <button 
-                            onClick={() => handlePinOutfit(outfit.id)} 
+                            onClick={(e) => { e.stopPropagation(); handlePinOutfit(outfit.id); }}
                             className={`p-1.5 rounded-lg transition-colors ${outfit.is_pinned ? 'text-primary-600 dark:text-primary-400' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
                           >
                             <svg className="w-4 h-4" fill={outfit.is_pinned ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -614,7 +620,7 @@ export default function WardrobePage() {
                             </svg>
                           </button>
                           <button 
-                            onClick={() => handleDeleteOutfit(outfit.id)} 
+                            onClick={(e) => { e.stopPropagation(); handleDeleteOutfit(outfit.id); }}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 transition-colors"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -645,6 +651,11 @@ export default function WardrobePage() {
                             )
                           })}
                         </div>
+                        
+                        {/* Click to view indicator */}
+                        <div className="mt-3 text-center">
+                          <span className="text-xs text-slate-500 dark:text-slate-400">Click to view details</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -668,6 +679,14 @@ export default function WardrobePage() {
               // Reset to first page to show new item
               setPage(1)
             }}
+          />
+        )}
+
+        {/* Outfit Detail Modal */}
+        {selectedOutfit && (
+          <OutfitDetailModal
+            outfit={selectedOutfit}
+            onClose={() => setSelectedOutfit(null)}
           />
         )}
       </div>
