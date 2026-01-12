@@ -42,10 +42,18 @@ class Settings:
     RAG_MIN_ITEMS_FALLBACK_BASE: int = int(os.getenv("RAG_MIN_ITEMS_FALLBACK", "5"))
     RAG_MIN_ITEMS_PER_CATEGORY_BASE: int = int(os.getenv("RAG_MIN_ITEMS_PER_CATEGORY", "1"))
     
-    # Auth Configuration
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7")
+    # Auth Configuration (SECRET_KEY is required - no default for security)
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    
+    def __init__(self):
+        # Validate required secrets at startup
+        if not self.SECRET_KEY or len(self.SECRET_KEY) < 32:
+            raise RuntimeError(
+                "SECRET_KEY environment variable is required and must be at least 32 characters. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
 
     # Legacy direct access (for backward compatibility)
     @property
