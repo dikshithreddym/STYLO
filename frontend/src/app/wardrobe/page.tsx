@@ -344,25 +344,6 @@ export default function WardrobePage() {
               </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit">
-              {[
-                { key: 'items', label: 'Items' },
-                { key: 'outfits', label: 'Outfits' },
-              ].map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key as 'items' | 'outfits')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key 
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' 
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
-                >
-                  {tab.label}
-                  {tab.key === 'items' && <span className="ml-1.5 text-slate-400 dark:text-slate-500">{allItems.length}</span>}
-                  {tab.key === 'outfits' && <span className="ml-1.5 text-slate-400 dark:text-slate-500">{savedOutfits.length}</span>}
-                </button>
-              ))}
-            </div>
           </div>
 
           {activeTab === 'items' && (
@@ -504,6 +485,26 @@ export default function WardrobePage() {
                 </div>
               </div>
 
+              {/* Tabs */}
+              <div className="mb-6 flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit">
+                {[
+                  { key: 'items', label: 'Items' },
+                  { key: 'outfits', label: 'Outfits' },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key as 'items' | 'outfits')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key 
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                  >
+                    {tab.label}
+                    {tab.key === 'items' && <span className="ml-1.5 text-slate-400 dark:text-slate-500">{allItems.length}</span>}
+                    {tab.key === 'outfits' && <span className="ml-1.5 text-slate-400 dark:text-slate-500">{savedOutfits.length}</span>}
+                  </button>
+                ))}
+              </div>
+
               {/* Wardrobe Grid */}
               {displayedItems.length === 0 ? (
                 <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-12 text-center">
@@ -603,6 +604,26 @@ export default function WardrobePage() {
 
           {activeTab === 'outfits' && (
             <div>
+              {/* Tabs */}
+              <div className="mb-6 flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit">
+                {[
+                  { key: 'items', label: 'Items' },
+                  { key: 'outfits', label: 'Outfits' },
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key as 'items' | 'outfits')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.key 
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                  >
+                    {tab.label}
+                    {tab.key === 'items' && <span className="ml-1.5 text-slate-400 dark:text-slate-500">{allItems.length}</span>}
+                    {tab.key === 'outfits' && <span className="ml-1.5 text-slate-400 dark:text-slate-500">{savedOutfits.length}</span>}
+                  </button>
+                ))}
+              </div>
+
               {savedOutfits.length === 0 ? (
                 <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-12 text-center">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
