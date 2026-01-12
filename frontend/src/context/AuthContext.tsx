@@ -8,6 +8,7 @@ interface User {
     id: number
     email: string
     full_name?: string
+    gender?: 'male' | 'female' | 'other'
     created_at: string
 }
 

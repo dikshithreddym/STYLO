@@ -55,9 +55,9 @@ const Navbar = () => {
 
               {user ? (
                 <div className="hidden sm:flex items-center gap-2 ml-2">
-                  <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-400 font-medium text-sm flex items-center justify-center">
+                  <Link href="/profile" aria-label="Open profile" className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/50 text-primary-600 dark:text-primary-400 font-medium text-sm flex items-center justify-center hover:opacity-90">
                     {user.email.charAt(0).toUpperCase()}
-                  </div>
+                  </Link>
                   <button
                     onClick={logout}
                     className="min-h-11 px-4 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.98] transition-all"
@@ -115,16 +115,19 @@ const Navbar = () => {
             Suggest
           </Link>
           {user ? (
-            <button
-              onClick={logout}
-              className="flex flex-col items-center justify-center gap-1 px-3 min-h-11 text-xs font-medium text-slate-500 dark:text-slate-400 active:scale-[0.98]"
-              aria-label="Sign out"
+            <Link
+              href="/profile"
+              aria-current={isActive('/profile') ? 'page' : undefined}
+              className={`flex flex-col items-center justify-center gap-1 px-3 min-h-11 text-xs font-medium transition-colors active:scale-[0.98] ${isActive('/profile')
+                ? 'text-primary-600 dark:text-primary-400'
+                : 'text-slate-500 dark:text-slate-400'
+                }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A9 9 0 1118.879 6.196 7 7 0 005.12 17.804z" />
               </svg>
-              Sign Out
-            </button>
+              Profile
+            </Link>
           ) : (
             <Link
               href="/login"

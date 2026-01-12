@@ -3,7 +3,7 @@ User-related schemas for authentication and user management.
 """
 import re
 from pydantic import BaseModel, Field, field_validator, EmailStr
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime
 
 
@@ -21,6 +21,10 @@ class UserCreate(UserBase):
         description="User password (8-128 chars, must contain letter and digit)"
     )
     full_name: Optional[str] = Field(None, description="User full name")
+    gender: Optional[Literal['male','female','other']] = Field(
+        None,
+        description="User gender (male, female, or other)"
+    )
     
     @field_validator('password')
     @classmethod
@@ -42,6 +46,7 @@ class UserResponse(UserBase):
     """Schema for user response"""
     id: int
     full_name: Optional[str] = None
+    gender: Optional[Literal['male','female','other']] = None
     created_at: datetime
     
     class Config:
@@ -57,3 +62,12 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     """Token payload data"""
     email: Optional[str] = None
+
+
+class UserUpdate(BaseModel):
+    """Schema for updating user profile"""
+    full_name: Optional[str] = Field(None, description="User full name")
+    gender: Optional[Literal['male','female','other']] = Field(
+        None,
+        description="User gender (male, female, or other)"
+    )
