@@ -24,7 +24,15 @@ import json
 # Rate limiter for suggestion endpoints (ML/Gemini calls are expensive)
 limiter = Limiter(key_func=get_remote_address)
 
-router = APIRouter(prefix="/v2", tags=["suggestions-v2"])
+router = APIRouter(
+    prefix="/v2",
+    tags=["Outfit Suggestions"],
+    responses={
+        401: {"description": "Not authenticated - invalid or expired token"},
+        429: {"description": "Too many requests - rate limit exceeded"},
+        503: {"description": "AI service temporarily unavailable"},
+    }
+)
 
 
 class V2SuggestRequest(BaseModel):

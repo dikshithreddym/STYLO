@@ -21,6 +21,14 @@ import requests, base64
 import cloudinary
 import cloudinary.api
 
+# OpenAPI response definitions for common errors
+COMMON_RESPONSES = {
+    401: {"description": "Not authenticated - invalid or expired token"},
+    403: {"description": "Forbidden - insufficient permissions"},
+    404: {"description": "Resource not found"},
+    429: {"description": "Too many requests - rate limit exceeded"},
+}
+
 
 def _infer_category_and_type(public_id: str, tags: list) -> Tuple[str, str]:
     """

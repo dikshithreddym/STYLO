@@ -24,4 +24,5 @@ python-multipart==0.0.6
 argon2-cffi==23.1.0
 greenlet==3.0.3
 slowapi==0.1.9
+alembic==1.13.1
 --extra-index-url https://download.pytorch.org/whl/cpu

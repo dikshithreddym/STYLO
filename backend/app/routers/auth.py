@@ -15,7 +15,11 @@ limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(
     prefix="/auth",
-    tags=["Authentication"]
+    tags=["Authentication"],
+    responses={
+        401: {"description": "Not authenticated - invalid or missing credentials"},
+        429: {"description": "Too many requests - rate limit exceeded"},
+    }
 )
 
 
