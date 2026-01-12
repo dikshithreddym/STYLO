@@ -121,7 +121,7 @@ async def suggest_v2(req: V2SuggestRequest, db: AsyncSession = Depends(get_async
                 )
             except Exception as e:
                 # Fallback to full wardrobe (filtered by user) on retrieval error
-                print(f"RAG retrieval failed, using full wardrobe: {e}")
+                logger.warning(f"RAG retrieval failed, using full wardrobe: {e}")
                 result = await db.execute(
                     select(WardrobeItem).where(WardrobeItem.user_id == current_user.id)
                 )
@@ -172,7 +172,7 @@ async def suggest_v2(req: V2SuggestRequest, db: AsyncSession = Depends(get_async
                     profiler.log_summary("[Suggest] ")
                     return result
         except Exception as e:
-            print(f"Gemini suggestion failed, falling back to semantic engine: {e}")
+            logger.warning(f"Gemini suggestion failed, falling back to semantic engine: {e}")
 
     # 3) Fallback to semantic embedding-based engine if Gemini not available/failed
     from ..reco.intent import classify_intent_zero_shot

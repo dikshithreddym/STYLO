@@ -1,6 +1,7 @@
 """
 Cloudinary image upload helper functions
 """
+import logging
 import cloudinary
 import cloudinary.uploader
 from cloudinary import CloudinaryImage
@@ -8,6 +9,8 @@ import re
 from typing import Optional, Dict, Any
 from fastapi import HTTPException
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 """Initialize Cloudinary with configuration from settings"""
 def initialize_cloudinary():
@@ -150,7 +153,7 @@ async def delete_image_from_cloudinary(public_id: str) -> bool:
         result = cloudinary.uploader.destroy(public_id)
         return result.get("result") == "ok"
     except Exception as e:
-        print(f"Failed to delete image from Cloudinary: {e}")
+        logger.error(f"Failed to delete image from Cloudinary: {e}")
         return False
 
 

@@ -36,17 +36,17 @@ def _sync_startup_tasks() -> None:
     # Pre-load sentence-transformers model to avoid cold start timeouts
     # This is CPU-intensive and MUST run in a thread to avoid blocking
     try:
-        print("🔄 Pre-loading sentence-transformers model...")
+        logger.info("Pre-loading sentence-transformers model...")
         from sentence_transformers import SentenceTransformer
         _ = SentenceTransformer('all-MiniLM-L6-v2')
-        print("✅ Model pre-loaded successfully")
+        logger.info("Model pre-loaded successfully")
     except Exception as exc:
-        print(f"⚠️  Model pre-load failed: {exc}")
+        logger.warning(f"Model pre-load failed: {exc}")
     
     # Mark startup as complete
     with _startup_lock:
         _startup_complete = True
-    print("✅ Startup tasks completed")
+    logger.info("Startup tasks completed")
 
 
 async def _run_startup_tasks() -> None:
@@ -60,7 +60,7 @@ async def _run_startup_tasks() -> None:
 def _create_tables() -> None:
     """Create database tables (runs in thread to avoid blocking)."""
     Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created/verified")
+    logger.info("Database tables created/verified")
 
 
 @asynccontextmanager
@@ -78,17 +78,17 @@ async def lifespan(app: FastAPI):
     # Start embedding worker for async embedding updates (non-blocking)
     try:
         start_embedding_worker()
-        print("✅ Embedding worker started")
+        logger.info("Embedding worker started")
     except Exception as e:
-        print(f"⚠️  Could not start embedding worker: {e}. Embeddings will be computed on-demand.")
+        logger.warning(f"Could not start embedding worker: {e}. Embeddings will be computed on-demand.")
     
-    print("🚀 Server starting, startup tasks running in background...")
+    logger.info("Server starting, startup tasks running in background...")
     
     yield  # Application runs here
     
     # === SHUTDOWN ===
     _startup_executor.shutdown(wait=False)
-    print("👋 Server shutting down...")
+    logger.info("Server shutting down...")
 
 
 # CORS configuration
@@ -114,7 +114,7 @@ frontend_url = os.getenv("FRONTEND_URL")
 if frontend_url and frontend_url not in allowed_origins:
     allowed_origins.append(frontend_url)
 
-print(f"✅ Enabled CORS for origins: {allowed_origins}")
+logger.info(f"Enabled CORS for origins: {allowed_origins}")
 
 
 app = FastAPI(

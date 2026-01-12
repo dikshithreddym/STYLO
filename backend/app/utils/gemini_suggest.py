@@ -38,12 +38,11 @@ async def suggest_outfit_with_gemini(
         gemini_api_key = str(gemini_api_key).strip()
     
     if not gemini_api_key:
-        print("Wait! GEMINI_API_KEY is missing in suggestions_v2.")
-        logger.error("GEMINI_API_KEY not set.")
+        logger.error("GEMINI_API_KEY not set - cannot use Gemini suggestions")
         return None
 
-    # Debug using print to force output to terminal
-    print(f"DEBUG: Using Gemini Key (len={len(gemini_api_key)}): {gemini_api_key[:4]}...{gemini_api_key[-4:]}")
+    # Log key info for debugging (masked for security)
+    logger.debug(f"Using Gemini Key (len={len(gemini_api_key)}): {gemini_api_key[:4]}...{gemini_api_key[-4:]}")
 
     try:
 
