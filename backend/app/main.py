@@ -24,15 +24,6 @@ def _sync_startup_tasks() -> None:
     """Synchronous startup tasks that run in a thread pool to avoid blocking."""
     global _startup_complete
     
-    try:
-        # The migration checks for the column and only adds if missing
-        from migrate_add_image_description import migrate  # type: ignore
-        migrate()
-        print("✅ Startup migration completed (image_description column ensured)")
-    except Exception as exc:
-        # Do not crash app on migration failure; log for visibility
-        print(f"⚠️  Migration on startup skipped/failed: {exc}")
-    
     # Pre-load sentence-transformers model to avoid cold start timeouts
     # This is CPU-intensive and MUST run in a thread to avoid blocking
     try:
@@ -55,17 +46,6 @@ async def _run_startup_tasks() -> None:
     
     # Run CPU-intensive tasks in thread pool (non-blocking)
     await loop.run_in_executor(_startup_executor, _sync_startup_tasks)
-    
-    # Backfill will only run if BACKFILL_ON_STARTUP=true is set in environment
-    # This is I/O-bound so can run in async context
-    if os.getenv("BACKFILL_ON_STARTUP", "false").lower() == "true":
-        try:
-            print("🔄 Running image description backfill...")
-            from backfill_image_descriptions import backfill_descriptions  # type: ignore
-            await backfill_descriptions()
-            print("✅ Backfill completed on startup")
-        except Exception as exc:
-            print(f"⚠️  Backfill on startup failed: {exc}")
 
 
 def _create_tables() -> None:
