@@ -202,6 +202,27 @@ export default function WardrobePage() {
   // Get unique types and colors from all items (not just displayed)
   const uniqueTypes = useMemo(() => Array.from(new Set(allItems.map(i => i.type))).sort(), [allItems])
   const uniqueColors = useMemo(() => Array.from(new Set(allItems.map(i => i.color))).sort(), [allItems])
+  const selectedFilter = typeFilter ? `type:${typeFilter}` : colorFilter ? `color:${colorFilter}` : ''
+
+  const handleFilterChange = (value: string) => {
+    setPage(1)
+    if (!value) {
+      setTypeFilter('')
+      setColorFilter('')
+      return
+    }
+    const [kind, ...rest] = value.split(':')
+    const selection = rest.join(':')
+    if (kind === 'type') {
+      setTypeFilter(selection)
+      setColorFilter('')
+      return
+    }
+    if (kind === 'color') {
+      setColorFilter(selection)
+      setTypeFilter('')
+    }
+  }
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this item?')) return
@@ -373,15 +394,22 @@ export default function WardrobePage() {
                   >
                     All
                   </button>
-                  {['top', 'bottom', 'footwear', 'outerwear', 'layer', 'accessories'].map((cat) => (
+                  {[
+                    { key: 'top', label: 'Top' },
+                    { key: 'bottom', label: 'Bottom' },
+                    { key: 'footwear', label: 'Footwear' },
+                    { key: 'one-piece', label: 'One-Piece' },
+                    { key: 'layer', label: 'Layer' },
+                    { key: 'accessories', label: 'Accessories' },
+                  ].map((cat) => (
                     <button
-                      key={cat}
-                      onClick={() => { setCategoryFilter(categoryFilter === cat ? '' : cat); setPage(1) }}
-                      className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all capitalize whitespace-nowrap ${categoryFilter === cat 
+                      key={cat.key}
+                      onClick={() => { setCategoryFilter(categoryFilter === cat.key ? '' : cat.key); setPage(1) }}
+                      className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${categoryFilter === cat.key 
                         ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' 
                         : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}
                     >
-                      {cat}
+                      {cat.label}
                     </button>
                   ))}
                 </div>
@@ -389,36 +417,37 @@ export default function WardrobePage() {
                 {/* Advanced Filters Row */}
                 <div className="pt-3 space-y-3">
                   {/* Dropdowns */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <select
-                      value={typeFilter}
-                      onChange={(e) => { setTypeFilter(e.target.value); setPage(1) }}
+                      value={selectedFilter}
+                      onChange={(e) => handleFilterChange(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
-                      <option value="">All Types</option>
-                      {uniqueTypes.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={colorFilter}
-                      onChange={(e) => { setColorFilter(e.target.value); setPage(1) }}
-                      className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="">All Colors</option>
-                      {uniqueColors.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
+                      <option value="">Filter</option>
+                      {uniqueTypes.length > 0 && (
+                        <optgroup label="Types">
+                          {uniqueTypes.map((t) => (
+                            <option key={`type-${t}`} value={`type:${t}`}>{t}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {uniqueColors.length > 0 && (
+                        <optgroup label="Colors">
+                          {uniqueColors.map((c) => (
+                            <option key={`color-${c}`} value={`color:${c}`}>{c}</option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
                     <select
                       value={sort}
                       onChange={(e) => { setSort(e.target.value as any); setPage(1) }}
                       className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
-                      <option value="id">Newest First</option>
-                      <option value="-id">Oldest First</option>
-                      <option value="type">Type A→Z</option>
-                      <option value="-type">Type Z→A</option>
+                      <option value="id">Newest</option>
+                      <option value="-id">Oldest</option>
+                      <option value="type">Type A-Z</option>
+                      <option value="-type">Type Z-A</option>
                     </select>
                   </div>
 
