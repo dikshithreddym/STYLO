@@ -3,12 +3,18 @@ Optional Gemini API integration for outfit suggestions.
 This provides an alternative to the semantic embedding-based engine.
 """
 import requests
+from requests.exceptions import Timeout, ConnectionError, RequestException
 import json
 import re
 import logging
 from typing import List, Dict, Optional
 from app.config import settings
 from app.utils.profiler import get_profiler
+
+# Timeout configuration for Gemini API calls (seconds)
+# - connect_timeout: time to establish connection
+# - read_timeout: time to receive response (AI processing takes time)
+GEMINI_TIMEOUT = (5.0, 30.0)  # (connect, read) tuple for requests library
 
 # Gemini token limits (approximate)
 # Gemini 2.5 Flash: ~1M input tokens, 8K output tokens
@@ -104,24 +110,34 @@ async def suggest_outfit_with_gemini(
         # Use structured output for better JSON generation
         # Lower temperature for more consistent, structured responses
         with profiler.measure("gemini_api_request"):
-            response = requests.post(
-                url,
-                headers={
-                    "Content-Type": "application/json",
-                    "x-goog-api-key": gemini_api_key
-                },
-                json={
-                    "contents": [{
-                        "parts": [{"text": prompt}]
-                    }],
-                    "generationConfig": {
-                        "temperature": 0.3,  # Lower for more consistent structured output
-                        "maxOutputTokens": 2048,
-                        "responseMimeType": "application/json",  # Enforce JSON output
-                    }
-                },
-                timeout=30
-            )
+            try:
+                response = requests.post(
+                    url,
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-goog-api-key": gemini_api_key
+                    },
+                    json={
+                        "contents": [{
+                            "parts": [{"text": prompt}]
+                        }],
+                        "generationConfig": {
+                            "temperature": 0.3,  # Lower for more consistent structured output
+                            "maxOutputTokens": 2048,
+                            "responseMimeType": "application/json",  # Enforce JSON output
+                        }
+                    },
+                    timeout=GEMINI_TIMEOUT
+                )
+            except Timeout:
+                logger.error("Gemini API request timed out (exceeded 30s)")
+                return None
+            except ConnectionError as e:
+                logger.error(f"Failed to connect to Gemini API: {e}")
+                return None
+            except RequestException as e:
+                logger.error(f"Gemini API request failed: {type(e).__name__}: {e}")
+                return None
 
         if response.status_code != 200:
             logger.error(f"Gemini API error: {response.status_code} {response.text}")

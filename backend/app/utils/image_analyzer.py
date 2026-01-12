@@ -2,11 +2,24 @@
 Image analysis utility using AI to generate clothing descriptions
 """
 import httpx
+from httpx import Timeout
 import re
 import logging
 import asyncio
 from typing import Optional
 from app.config import settings
+
+# Timeout configuration for external API calls
+# - connect: time to establish connection
+# - read: time to receive response
+# - write: time to send request
+# - pool: time to acquire connection from pool
+API_TIMEOUT = Timeout(
+    connect=5.0,    # 5 seconds to connect
+    read=30.0,      # 30 seconds to read response (AI processing takes time)
+    write=10.0,     # 10 seconds to send request (images can be large)
+    pool=5.0        # 5 seconds to get connection from pool
+)
 
 
 def extract_base64_from_data_url(data_url: str) -> Optional[str]:
@@ -74,9 +87,9 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
         max_retries = 3
         retry_delay = 2  # Start with 2 seconds
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
             for attempt in range(max_retries):
-                response = await client.post(url, headers=headers, json=payload, timeout=30)
+                response = await client.post(url, headers=headers, json=payload)
                 
                 logger.info(f"Gemini API response status: {response.status_code} (attempt {attempt + 1}/{max_retries})")
 
@@ -140,6 +153,9 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
         logger.info(f"Successfully generated description: {description[:100]}...")
         return description
 
+    except httpx.TimeoutException as e:
+        logger.error(f"Timeout analyzing image (API took too long): {type(e).__name__}: {e}")
+        return None
     except httpx.HTTPError as e:
         logger.error(f"HTTP error analyzing image: {type(e).__name__}: {e}")
         return None

@@ -12,6 +12,10 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Cloudinary timeout configuration (seconds)
+# Applied globally to all Cloudinary API operations
+CLOUDINARY_TIMEOUT = 30
+
 """Initialize Cloudinary with configuration from settings"""
 def initialize_cloudinary():
     if settings.cloudinary_configured:
@@ -19,7 +23,8 @@ def initialize_cloudinary():
             cloud_name=settings.CLOUDINARY_CLOUD_NAME,
             api_key=settings.CLOUDINARY_API_KEY,
             api_secret=settings.CLOUDINARY_API_SECRET,
-            secure=True
+            secure=True,
+            timeout=CLOUDINARY_TIMEOUT  # Add timeout to prevent hanging
         )
         return True
     return False
