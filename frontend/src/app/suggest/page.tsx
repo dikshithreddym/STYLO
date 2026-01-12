@@ -8,6 +8,7 @@ import { suggestionsAPI, V2SuggestResponse, V2Outfit, V2Item, outfitsAPI } from 
 import { saveSuggestHistory } from '@/lib/storage'
 import { getColorHex } from '@/lib/colors'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import { useToast } from '@/components/ui/Toast'
 
 const SUGGEST_QUERY_KEY = 'stylo.suggest.query'
 const SUGGEST_RESULT_KEY = 'stylo.suggest.result'
@@ -58,6 +59,7 @@ export default function SuggestPage() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<V2SuggestResponse | null>(null)
   const [savingOutfitIndex, setSavingOutfitIndex] = useState<number | null>(null)
+  const { addToast } = useToast()
   const promptIdeas = [
     'Creative brunch at an art gallery',
     'Remote work day at a coffee shop',
@@ -132,10 +134,10 @@ export default function SuggestPage() {
         items: itemsToSave,
         name: `${prettyIntent} Suggestion`
       })
-      alert('Outfit saved to wardrobe!')
+      addToast('Outfit saved to wardrobe!', 'success')
     } catch (e) {
       console.error(e)
-      alert('Failed to save outfit')
+      addToast('Failed to save outfit', 'error')
     } finally {
       setSavingOutfitIndex(null)
     }

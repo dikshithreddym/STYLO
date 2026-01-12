@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useId } from 'react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { wardrobeAPI, WardrobeItem } from '@/lib/api'
@@ -24,6 +24,10 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [stream, setStream] = useState<MediaStream | null>(null)
+  const modalRef = useRef<HTMLDivElement>(null)
+  const lastActiveRef = useRef<HTMLElement | null>(null)
+  const photoInputId = useId()
+  const categorySelectId = useId()
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -102,6 +106,14 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
       }
     }
   }, [stream, cameraActive])
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [])
 
   const stopCamera = () => {
     if (stream) {
@@ -205,14 +217,72 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
     onClose()
   }
 
+  useEffect(() => {
+    lastActiveRef.current = document.activeElement as HTMLElement | null
+
+    const focusableSelector =
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+    const focusFirst = () => {
+      const container = modalRef.current
+      if (!container) return
+      const focusable = Array.from(container.querySelectorAll<HTMLElement>(focusableSelector))
+      if (focusable.length > 0) {
+        focusable[0].focus()
+      } else {
+        container.focus()
+      }
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        handleClose()
+        return
+      }
+
+      if (e.key !== 'Tab') return
+      const container = modalRef.current
+      if (!container) return
+      const focusable = Array.from(container.querySelectorAll<HTMLElement>(focusableSelector))
+      if (focusable.length === 0) {
+        e.preventDefault()
+        container.focus()
+        return
+      }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+
+    focusFirst()
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      lastActiveRef.current?.focus()
+    }
+  }, [])
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-opacity-70 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-item-title"
+        tabIndex={-1}
+        className="bg-white dark:bg-slate-800 rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto"
+      >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Add Wardrobe Item</h2>
+          <h2 id="add-item-title" className="text-2xl font-bold text-gray-900 dark:text-white">Add Wardrobe Item</h2>
           <button
             onClick={handleClose}
-            className="text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300"
+            className="min-h-11 min-w-11 p-2 rounded-lg text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-[0.98] transition-transform"
             aria-label="Close"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -241,14 +311,14 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
 
             {/* Image Upload Section */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Photo</label>
+              <label htmlFor={photoInputId} className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Photo</label>
               
               {!imagePreview && !cameraActive && (
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 px-4 py-2 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg hover:border-primary-500 transition-colors"
+                    className="flex-1 min-h-11 px-4 py-2 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg hover:border-primary-500 active:scale-[0.99] transition-all"
                   >
                     <svg className="w-6 h-6 mx-auto mb-1 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -258,7 +328,7 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
                   <button
                     type="button"
                     onClick={startCamera}
-                    className="flex-1 px-4 py-2 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg hover:border-primary-500 transition-colors"
+                    className="flex-1 min-h-11 px-4 py-2 border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg hover:border-primary-500 active:scale-[0.99] transition-all"
                   >
                     <svg className="w-6 h-6 mx-auto mb-1 text-gray-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -298,7 +368,7 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
                       setImageFile(null)
                       setImagePreview(null)
                     }}
-                    className="text-sm text-red-600 hover:text-red-800"
+                    className="min-h-11 text-sm text-red-600 hover:text-red-800 active:scale-[0.99] transition-transform"
                   >
                     Remove Image
                   </button>
@@ -307,6 +377,7 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
 
               <input
                 ref={fileInputRef}
+                id={photoInputId}
                 type="file"
                 accept="image/*"
                 onChange={handleFileSelect}
@@ -315,8 +386,9 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Category *</label>
+              <label htmlFor={categorySelectId} className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Category *</label>
               <select
+                id={categorySelectId}
                 value={category}
                 onChange={(e) => setCategory(e.target.value as any)}
                 className="w-full px-4 py-2 border dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 dark:text-white bg-white dark:bg-slate-700"
@@ -331,7 +403,11 @@ export default function AddItemModal({ onClose, onSuccess }: AddItemModalProps) 
             </div>
           </div>
 
-          {error && <p className="text-red-600 dark:text-red-400 text-sm mt-3">{error}</p>}
+          {error && (
+            <p role="alert" aria-live="assertive" className="text-red-600 dark:text-red-400 text-sm mt-3">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-3 mt-6">
             <Button type="submit" disabled={loading} className="flex-1">

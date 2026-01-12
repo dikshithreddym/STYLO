@@ -47,7 +47,11 @@ export default function RootLayout({
             <AuthProvider>
               <SkipToContent />
               <Navbar />
-              <main id="main-content" className="min-h-screen" role="main">
+              <main
+                id="main-content"
+                className="min-h-[100svh] pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-0"
+                role="main"
+              >
                 {children}
               </main>
             </AuthProvider>

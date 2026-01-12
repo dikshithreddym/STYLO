@@ -12,9 +12,10 @@ export default function ThemeToggle({ className = '' }: ThemeToggleProps) {
     return (
         <button
             onClick={toggleTheme}
-            className={`relative p-2 rounded-full transition-all duration-300 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 ${className}`}
+            className={`relative h-11 w-11 p-2 rounded-full transition-all duration-300 hover:bg-gray-100 dark:hover:bg-slate-700 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-slate-900 ${className}`}
             aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
             title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+            aria-pressed={theme === 'dark'}
         >
             {/* Sun icon - visible in dark mode */}
             <svg

@@ -48,7 +48,7 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
+        <div className="min-h-[calc(100svh-4rem)] flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8">
             <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-center">
                 <div className="hidden lg:block glass-panel rounded-3xl p-10 relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-primary-100/70 via-white to-white dark:from-primary-900/30 dark:via-slate-800 dark:to-slate-800 pointer-events-none" />
@@ -90,7 +90,11 @@ export default function LoginPage() {
 
                     <form className="space-y-5" onSubmit={handleSubmit}>
                         {error && (
-                            <div className="rounded-2xl bg-red-50 dark:bg-red-900/30 p-4 border border-red-100 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-start gap-3">
+                            <div
+                                className="rounded-2xl bg-red-50 dark:bg-red-900/30 p-4 border border-red-100 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-start gap-3"
+                                role="alert"
+                                aria-live="assertive"
+                            >
                                 <svg className="w-5 h-5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -125,7 +129,7 @@ export default function LoginPage() {
                                     autoComplete="current-password"
                                     required
                                     className="block w-full rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-3 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 dark:focus:ring-primary-800 focus:outline-none transition-all bg-white/70 dark:bg-slate-800/70"
-                                    placeholder="••••••••"
+                                    placeholder="Enter your password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                 />
