@@ -1,13 +1,15 @@
 
 """
-Database configuration, session management, and models (PostgreSQL only)
+Database configuration and session management (PostgreSQL only).
+Models are defined in app/models/ - imported here for backward compatibility.
 """
-from sqlalchemy import create_engine, Column, Integer, String, Text, JSON, DateTime, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base # keep this if needed, but preferred is orm
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 import os
-from datetime import datetime
 from dotenv import load_dotenv
+
+# Import models from their proper location (re-export for backward compatibility)
+from app.models import Base, User, WardrobeItem, SavedOutfit
 
 load_dotenv()
 
@@ -37,8 +39,6 @@ engine = create_engine(
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Base class for models
-Base = declarative_base()
 
 def get_db():
     """Dependency to get database session"""
@@ -48,49 +48,7 @@ def get_db():
     finally:
         db.close()
 
-# Database models
-class WardrobeItem(Base):
-    """Wardrobe item model"""
-    __tablename__ = "wardrobe_items"
 
-    id = Column(Integer, primary_key=True, index=True)
-    type = Column(String(100), nullable=False, index=True)
-    color = Column(String(100), nullable=False, index=True)
-    image_url = Column(Text, nullable=True)  # Cloudinary URL
-    category = Column(String(50), nullable=True, index=True)
-    cloudinary_id = Column(String(255), nullable=True)  # For deletion
-    image_description = Column(Text, nullable=True)  # AI-generated description
-    embedding = Column(JSON, nullable=True)  # Cached embedding vector (list of floats)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True) # Making nullable first for migration safety, then we can enforce it
+# Re-export for backward compatibility
+__all__ = ["engine", "SessionLocal", "Base", "get_db", "User", "WardrobeItem", "SavedOutfit"]
 
-    def to_dict(self):
-        """Convert to dictionary"""
-        return {
-            "id": self.id,
-            "type": self.type,
-            "color": self.color,
-            "image_url": self.image_url,
-            "category": self.category,
-            "image_description": self.image_description,
-        }
-
-class User(Base):
-    """User model for authentication"""
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    full_name = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-class SavedOutfit(Base):
-    """Saved outfit model"""
-    __tablename__ = "saved_outfits"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String(255), nullable=True) # Optional name for the outfit
-    items = Column(JSON, nullable=False) # JSON object with keys like 'top', 'bottom', etc. containing item IDs or details
-    is_pinned = Column(Integer, default=0, nullable=False) # 0 = not pinned, 1 = pinned
-    created_at = Column(DateTime, default=datetime.utcnow)
