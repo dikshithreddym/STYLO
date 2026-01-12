@@ -11,14 +11,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Get database URL from environment variable or use default PostgreSQL URL
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://stylo_user:3mVRKCccUHCTLALCPlAEWKvsOuXxzy1z@dpg-d4bkin0dl3ps739f0t4g-a.oregon-postgres.render.com/stylo_db_not6"
-)
+# Get database URL from environment variable (REQUIRED - no default for security)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Fix for Render PostgreSQL URL (uses postgresql:// instead of postgres://)
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is required. "
+        "Set it in your .env file or environment."
+    )
+
+# Fix for Render PostgreSQL URL (uses postgres:// instead of postgresql://)
+if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # Create engine with optimized connection pooling

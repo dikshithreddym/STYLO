@@ -343,3 +343,4 @@ async def test_redis():
             "error_type": type(e).__name__,
             "redis_url": os.getenv("REDIS_URL", "not set")[:50] + "..." if os.getenv("REDIS_URL") else "not set"
         }
+    
