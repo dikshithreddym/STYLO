@@ -10,14 +10,18 @@ from datetime import datetime
 import os
 import asyncio
 from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
 
 # Global flag to track startup completion
 _startup_complete = False
 _startup_lock = Lock()
 
+# Thread pool for CPU-bound startup tasks
+_startup_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="startup")
 
-async def _run_startup_tasks() -> None:
-    """Run startup tasks in background to avoid blocking health checks"""
+
+def _sync_startup_tasks() -> None:
+    """Synchronous startup tasks that run in a thread pool to avoid blocking."""
     global _startup_complete
     
     try:
@@ -30,6 +34,7 @@ async def _run_startup_tasks() -> None:
         print(f"⚠️  Migration on startup skipped/failed: {exc}")
     
     # Pre-load sentence-transformers model to avoid cold start timeouts
+    # This is CPU-intensive and MUST run in a thread to avoid blocking
     try:
         print("🔄 Pre-loading sentence-transformers model...")
         from sentence_transformers import SentenceTransformer
@@ -38,8 +43,21 @@ async def _run_startup_tasks() -> None:
     except Exception as exc:
         print(f"⚠️  Model pre-load failed: {exc}")
     
+    # Mark startup as complete
+    with _startup_lock:
+        _startup_complete = True
+    print("✅ Startup tasks completed")
+
+
+async def _run_startup_tasks() -> None:
+    """Run startup tasks in background thread pool to avoid blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    
+    # Run CPU-intensive tasks in thread pool (non-blocking)
+    await loop.run_in_executor(_startup_executor, _sync_startup_tasks)
+    
     # Backfill will only run if BACKFILL_ON_STARTUP=true is set in environment
-    # This avoids running backfill on every startup unless explicitly required
+    # This is I/O-bound so can run in async context
     if os.getenv("BACKFILL_ON_STARTUP", "false").lower() == "true":
         try:
             print("🔄 Running image description backfill...")
@@ -48,21 +66,24 @@ async def _run_startup_tasks() -> None:
             print("✅ Backfill completed on startup")
         except Exception as exc:
             print(f"⚠️  Backfill on startup failed: {exc}")
-    
-    # Mark startup as complete
-    with _startup_lock:
-        _startup_complete = True
-    print("✅ Startup tasks completed")
+
+
+def _create_tables() -> None:
+    """Create database tables (runs in thread to avoid blocking)."""
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created/verified")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager - handles startup and shutdown events."""
     # === STARTUP ===
-    # Create database tables
-    Base.metadata.create_all(bind=engine)
+    loop = asyncio.get_event_loop()
     
-    # Run startup tasks in background (non-blocking)
+    # Create database tables in thread pool (non-blocking)
+    await loop.run_in_executor(_startup_executor, _create_tables)
+    
+    # Run startup tasks in background (non-blocking, doesn't wait)
     asyncio.create_task(_run_startup_tasks())
     
     # Start embedding worker for async embedding updates (non-blocking)
@@ -77,6 +98,7 @@ async def lifespan(app: FastAPI):
     yield  # Application runs here
     
     # === SHUTDOWN ===
+    _startup_executor.shutdown(wait=False)
     print("👋 Server shutting down...")
 
 
