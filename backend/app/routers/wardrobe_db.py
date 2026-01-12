@@ -120,8 +120,27 @@ async def cloudinary_status():
     return get_cloudinary_status()
 
 @router.delete("/clear-all")
-async def clear_all_items(db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
-    """Remove all wardrobe items (dangerous)."""
+async def clear_all_items(
+    confirm: bool = Query(
+        ..., 
+        description="Set to true to confirm deletion of ALL wardrobe items. This action cannot be undone."
+    ),
+    db: AsyncSession = Depends(get_async_db), 
+    current_user: User = Depends(get_current_user_async)
+):
+    """
+    Remove all wardrobe items for the current user.
+    
+    ⚠️ DANGEROUS: This permanently deletes ALL items and cannot be undone.
+    
+    Requires `confirm=true` query parameter to proceed.
+    """
+    if not confirm:
+        raise HTTPException(
+            status_code=400, 
+            detail="Deletion not confirmed. Set confirm=true to delete ALL wardrobe items. This action cannot be undone."
+        )
+    
     # Get count first
     count_result = await db.execute(
         select(func.count()).select_from(WardrobeItemModel).where(WardrobeItemModel.user_id == current_user.id)
@@ -133,7 +152,7 @@ async def clear_all_items(db: AsyncSession = Depends(get_async_db), current_user
         delete(WardrobeItemModel).where(WardrobeItemModel.user_id == current_user.id)
     )
     await db.commit()
-    return {"status": "ok", "removed": count}
+    return {"status": "ok", "removed": count, "warning": "All wardrobe items have been permanently deleted"}
 
 
 class RefreshEmbeddingsRequest(BaseModel):
