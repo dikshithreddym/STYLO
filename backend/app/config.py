@@ -47,6 +47,9 @@ class Settings:
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
+    # Admin API Key for protected admin endpoints (optional but recommended)
+    ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", "")
+    
     def __init__(self):
         # Validate required secrets at startup
         if not self.SECRET_KEY or len(self.SECRET_KEY) < 32:

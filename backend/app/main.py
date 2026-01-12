@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -15,14 +15,51 @@ from app.core.exceptions import (
     http_exception_handler,
     generic_exception_handler,
 )
+from app.config import settings
 from datetime import datetime
 import os
 import asyncio
 import logging
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Admin Authentication
+# =============================================================================
+async def verify_admin_api_key(x_admin_api_key: Optional[str] = Header(None, alias="X-Admin-API-Key")):
+    """
+    Verify admin API key for protected admin endpoints.
+    Requires X-Admin-API-Key header matching ADMIN_API_KEY env var.
+    """
+    if not settings.ADMIN_API_KEY:
+        # If ADMIN_API_KEY not configured, block all admin access in production
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        if env != "development":
+            raise HTTPException(
+                status_code=503,
+                detail="Admin endpoints disabled. Configure ADMIN_API_KEY to enable."
+            )
+        # In development, allow access without key (with warning)
+        logger.warning("Admin endpoint accessed without ADMIN_API_KEY (development mode)")
+        return True
+    
+    if not x_admin_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing X-Admin-API-Key header"
+        )
+    
+    if x_admin_api_key != settings.ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid admin API key"
+        )
+    
+    return True
 
 # =============================================================================
 # Rate Limiting Configuration
@@ -156,7 +193,7 @@ app.add_middleware(
 
 
 # Admin endpoint for manual backfill trigger
-@app.post("/admin/backfill-descriptions")
+@app.post("/admin/backfill-descriptions", dependencies=[Depends(verify_admin_api_key)])
 async def trigger_backfill():
     """Admin endpoint to trigger image description backfill for existing items"""
     try:
@@ -239,7 +276,7 @@ async def readiness_check():
         )
 
 
-@app.get("/admin/version")
+@app.get("/admin/version", dependencies=[Depends(verify_admin_api_key)])
 async def version_info():
     """Admin: return deployment/version metadata to verify live build.
 
