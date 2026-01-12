@@ -1,12 +1,12 @@
 from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from typing import List, Optional, Tuple
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, delete
 from pydantic import BaseModel
 from app.schemas import WardrobeItem as WardrobeItemSchema, WardrobeItemCreate, SavedOutfitCreate, SavedOutfitResponse
 from app.database import WardrobeItem as WardrobeItemModel, User, SavedOutfit
-from app.database import get_db
-from app.utils.auth import get_current_user
+from app.database import get_async_db
+from app.utils.auth import get_current_user_async
 from datetime import datetime
 from app.utils.cloudinary_helper import (
     upload_image_to_cloudinary,
@@ -81,8 +81,8 @@ router = APIRouter()
 @router.get("", response_model=List[WardrobeItemSchema])
 async def get_wardrobe_items(
     response: Response,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user_async),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(100, ge=1, le=100, description="Items per page (max 100)"),
 ):
@@ -90,14 +90,20 @@ async def get_wardrobe_items(
     Get wardrobe items with pagination.
     Filtering and sorting are handled client-side for better performance.
     """
-    # Standard query with filtering
-    query = db.query(WardrobeItemModel).filter(WardrobeItemModel.user_id == current_user.id)
-    
     # Get total count
-    total = query.count()
+    count_result = await db.execute(
+        select(func.count()).select_from(WardrobeItemModel).where(WardrobeItemModel.user_id == current_user.id)
+    )
+    total = count_result.scalar()
     
     # Apply pagination
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    result = await db.execute(
+        select(WardrobeItemModel)
+        .where(WardrobeItemModel.user_id == current_user.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    items = result.scalars().all()
 
     # Set total count header
     response.headers["X-Total-Count"] = str(total)
@@ -114,12 +120,19 @@ async def cloudinary_status():
     return get_cloudinary_status()
 
 @router.delete("/clear-all")
-async def clear_all_items(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def clear_all_items(db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """Remove all wardrobe items (dangerous)."""
-    query = db.query(WardrobeItemModel).filter(WardrobeItemModel.user_id == current_user.id)
-    count = query.count()
-    query.delete(synchronize_session=False)
-    db.commit()
+    # Get count first
+    count_result = await db.execute(
+        select(func.count()).select_from(WardrobeItemModel).where(WardrobeItemModel.user_id == current_user.id)
+    )
+    count = count_result.scalar()
+    
+    # Delete all items
+    await db.execute(
+        delete(WardrobeItemModel).where(WardrobeItemModel.user_id == current_user.id)
+    )
+    await db.commit()
     return {"status": "ok", "removed": count}
 
 
@@ -130,17 +143,18 @@ class RefreshEmbeddingsRequest(BaseModel):
 @router.post("/refresh-embeddings")
 async def refresh_embeddings(
     request: Optional[RefreshEmbeddingsRequest] = None,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Batch refresh embeddings for wardrobe items.
     If item_ids is provided in request body, refresh only those items.
     Otherwise, refresh all items that don't have embeddings yet.
+    Note: This uses sync embedding operations in a thread pool internally.
     """
-    from app.utils.embedding_service import batch_refresh_embeddings
+    from app.utils.embedding_service import batch_refresh_embeddings_async
     
     item_ids = request.item_ids if request else None
-    refreshed = batch_refresh_embeddings(db, item_ids)
+    refreshed = await batch_refresh_embeddings_async(db, item_ids)
     return {
         "status": "ok",
         "refreshed": refreshed,
@@ -150,8 +164,8 @@ async def refresh_embeddings(
 
 @router.post("/sync-cloudinary")
 async def sync_from_cloudinary(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user_async),
     folder: Optional[str] = Query(None, description="Cloudinary folder prefix; defaults to settings.CLOUDINARY_FOLDER"),
     max_results: int = Query(100, ge=1, le=500, description="Max resources to pull per page"),
 ):
@@ -188,8 +202,10 @@ async def sync_from_cloudinary(
             tags = r.get("tags") or []
 
             # Skip if already imported
-            existing = db.query(WardrobeItemModel).filter(WardrobeItemModel.cloudinary_id == public_id).first()
-            if existing:
+            existing_result = await db.execute(
+                select(WardrobeItemModel).where(WardrobeItemModel.cloudinary_id == public_id)
+            )
+            if existing_result.scalar_one_or_none():
                 continue
 
             inferred_type, category = _infer_category_and_type(public_id or "", tags)
@@ -215,7 +231,7 @@ async def sync_from_cloudinary(
             db.add(item)
             created += 1
 
-        db.commit()
+        await db.commit()
 
         next_cursor = res.get("next_cursor")
         if not next_cursor:
@@ -225,9 +241,12 @@ async def sync_from_cloudinary(
 
 
 @router.post("/recategorize")
-async def recategorize_from_descriptions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def recategorize_from_descriptions(db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """Re-categorize items based on their Gemini-generated descriptions"""
-    items = db.query(WardrobeItemModel).filter(WardrobeItemModel.user_id == current_user.id).all()
+    result = await db.execute(
+        select(WardrobeItemModel).where(WardrobeItemModel.user_id == current_user.id)
+    )
+    items = result.scalars().all()
     updated = 0
     
     for item in items:
@@ -249,13 +268,13 @@ async def recategorize_from_descriptions(db: Session = Depends(get_db), current_
         if item.category != old_cat:
             updated += 1
     
-    db.commit()
+    await db.commit()
     return {"status": "ok", "updated": updated}
 
 
 
 @router.post("/outfits", response_model=SavedOutfitResponse, status_code=201)
-async def save_outfit(payload: SavedOutfitCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def save_outfit(payload: SavedOutfitCreate, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """Save a generated outfit"""
     outfit = SavedOutfit(
         user_id=current_user.id,
@@ -263,55 +282,69 @@ async def save_outfit(payload: SavedOutfitCreate, db: Session = Depends(get_db),
         items=payload.items
     )
     db.add(outfit)
-    db.commit()
-    db.refresh(outfit)
+    await db.commit()
+    await db.refresh(outfit)
     return outfit
 
 
 @router.get("/outfits", response_model=List[SavedOutfitResponse])
-async def get_saved_outfits(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_saved_outfits(db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """Get all saved outfits for the current user, pinned outfits first"""
-    return db.query(SavedOutfit).filter(SavedOutfit.user_id == current_user.id).order_by(SavedOutfit.is_pinned.desc(), SavedOutfit.created_at.desc()).all()
+    result = await db.execute(
+        select(SavedOutfit)
+        .where(SavedOutfit.user_id == current_user.id)
+        .order_by(SavedOutfit.is_pinned.desc(), SavedOutfit.created_at.desc())
+    )
+    return result.scalars().all()
 
 
 @router.patch("/outfits/{outfit_id}/pin", response_model=SavedOutfitResponse)
-async def toggle_outfit_pin(outfit_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def toggle_outfit_pin(outfit_id: int, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """Toggle the pinned status of a saved outfit"""
-    outfit = db.query(SavedOutfit).filter(SavedOutfit.id == outfit_id, SavedOutfit.user_id == current_user.id).first()
+    result = await db.execute(
+        select(SavedOutfit).where(SavedOutfit.id == outfit_id, SavedOutfit.user_id == current_user.id)
+    )
+    outfit = result.scalar_one_or_none()
     if not outfit:
         raise HTTPException(status_code=404, detail="Outfit not found")
     
     # Toggle the pin status
     outfit.is_pinned = 0 if outfit.is_pinned else 1
-    db.commit()
-    db.refresh(outfit)
+    await db.commit()
+    await db.refresh(outfit)
     return outfit
 
 
 @router.delete("/outfits/{outfit_id}", status_code=204)
-async def delete_saved_outfit(outfit_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def delete_saved_outfit(outfit_id: int, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """Delete a saved outfit"""
-    outfit = db.query(SavedOutfit).filter(SavedOutfit.id == outfit_id, SavedOutfit.user_id == current_user.id).first()
+    result = await db.execute(
+        select(SavedOutfit).where(SavedOutfit.id == outfit_id, SavedOutfit.user_id == current_user.id)
+    )
+    outfit = result.scalar_one_or_none()
     if not outfit:
         raise HTTPException(status_code=404, detail="Outfit not found")
-    db.delete(outfit)
-    db.commit()
+    await db.delete(outfit)
+    await db.commit()
     return Response(status_code=204)
 
 
 @router.get("/{item_id}", response_model=WardrobeItemSchema)
-async def get_wardrobe_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_wardrobe_item(item_id: int, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """
     Get a specific wardrobe item by ID
     """
-    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id, WardrobeItemModel.user_id == current_user.id).first()
+    result = await db.execute(
+        select(WardrobeItemModel).where(WardrobeItemModel.id == item_id, WardrobeItemModel.user_id == current_user.id)
+    )
+    item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     return item.to_dict()
 
 
 @router.post("", response_model=WardrobeItemSchema, status_code=201)
-async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def create_wardrobe_item(payload: WardrobeItemCreate, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """
     Add a new item to the wardrobe
     """
@@ -380,8 +413,8 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
         user_id=current_user.id
     )
     db.add(new_item)
-    db.commit()
-    db.refresh(new_item)
+    await db.commit()
+    await db.refresh(new_item)
     
     # Queue async embedding refresh (non-blocking)
     queue_embedding_refresh(new_item.id)
@@ -390,13 +423,24 @@ async def create_wardrobe_item(payload: WardrobeItemCreate, db: Session = Depend
 
 
 @router.patch("/{item_id}", response_model=WardrobeItemSchema)
-async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """
     Update a wardrobe item by ID
     """
-    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id, WardrobeItemModel.user_id == current_user.id).first()
+    result = await db.execute(
+        select(WardrobeItemModel).where(WardrobeItemModel.id == item_id, WardrobeItemModel.user_id == current_user.id)
+    )
+    item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    
+    # Check if any fields that affect embedding have changed (before updating)
+    embedding_fields_changed = (
+        payload.type != item.type or
+        payload.color != item.color or
+        payload.category != item.category or
+        (payload.image_url and payload.image_url != item.image_url)
+    )
     
     # Update fields
     item.type = payload.type
@@ -431,16 +475,8 @@ async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Se
         item.image_url = image_url
         item.cloudinary_id = cloudinary_public_id
     
-    # Check if any fields that affect embedding have changed
-    embedding_fields_changed = (
-        payload.type != item.type or
-        payload.color != item.color or
-        payload.category != item.category or
-        (payload.image_url and payload.image_url != item.image_url)
-    )
-    
-    db.commit()
-    db.refresh(item)
+    await db.commit()
+    await db.refresh(item)
     
     # Invalidate suggestion cache (wardrobe changes affect suggestions)
     cache_clear_pattern("suggestion:*")
@@ -453,11 +489,14 @@ async def update_wardrobe_item(item_id: int, payload: WardrobeItemCreate, db: Se
 
 
 @router.delete("/{item_id}", status_code=204)
-async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def delete_wardrobe_item(item_id: int, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     """
     Delete a wardrobe item by ID
     """
-    item = db.query(WardrobeItemModel).filter(WardrobeItemModel.id == item_id, WardrobeItemModel.user_id == current_user.id).first()
+    result = await db.execute(
+        select(WardrobeItemModel).where(WardrobeItemModel.id == item_id, WardrobeItemModel.user_id == current_user.id)
+    )
+    item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     
@@ -465,8 +504,8 @@ async def delete_wardrobe_item(item_id: int, db: Session = Depends(get_db), curr
     if item.cloudinary_id:
         await delete_image_from_cloudinary(item.cloudinary_id)
     
-    db.delete(item)
-    db.commit()
+    await db.delete(item)
+    await db.commit()
     
     # Invalidate suggestion cache (wardrobe changes affect suggestions)
     cache_clear_pattern("suggestion:*")

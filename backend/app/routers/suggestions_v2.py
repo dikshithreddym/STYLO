@@ -5,14 +5,15 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-from ..database import get_db, User
+from ..database import get_async_db, User
 from ..database import WardrobeItem
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user_async
 from ..reco.intent import classify_intent_zero_shot
 from ..reco.selector import assemble_outfits
-from ..reco.retriever import retrieve_relevant_items
+from ..reco.retriever import retrieve_relevant_items_async
 from ..utils.gemini_suggest import suggest_outfit_with_gemini
 from ..utils.profiler import get_profiler, reset_profiler
 from ..config import settings
@@ -78,7 +79,7 @@ def _model_to_dict(it: WardrobeItem) -> dict:
 
 
 @router.post("/suggestions", response_model=V2SuggestResponse)
-async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def suggest_v2(req: V2SuggestRequest, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     # Reset profiler for this request
     profiler = reset_profiler()
     
@@ -109,7 +110,7 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db), curre
         if settings.RAG_ENABLED:
             try:
                 # Use adaptive thresholds (None = auto-calculate based on data volume)
-                items = retrieve_relevant_items(
+                items = await retrieve_relevant_items_async(
                     query=text,
                     db=db,
                     user_id=current_user.id,
@@ -121,9 +122,15 @@ async def suggest_v2(req: V2SuggestRequest, db: Session = Depends(get_db), curre
             except Exception as e:
                 # Fallback to full wardrobe (filtered by user) on retrieval error
                 print(f"RAG retrieval failed, using full wardrobe: {e}")
-                items = db.query(WardrobeItem).filter(WardrobeItem.user_id == current_user.id).all()
+                result = await db.execute(
+                    select(WardrobeItem).where(WardrobeItem.user_id == current_user.id)
+                )
+                items = result.scalars().all()
         else:
-            items = db.query(WardrobeItem).filter(WardrobeItem.user_id == current_user.id).all()
+            result = await db.execute(
+                select(WardrobeItem).where(WardrobeItem.user_id == current_user.id)
+            )
+            items = result.scalars().all()
     
     wardrobe = [_model_to_dict(it) for it in items]
     if not wardrobe:

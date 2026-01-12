@@ -2,9 +2,15 @@
 """
 Database configuration and session management (PostgreSQL only).
 Models are defined in app/models/ - imported here for backward compatibility.
+
+Supports both sync and async operations:
+- Sync: Use `get_db()` dependency and `SessionLocal`
+- Async: Use `get_async_db()` dependency and `AsyncSessionLocal`
 """
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from typing import AsyncGenerator
 import os
 from dotenv import load_dotenv
 
@@ -26,22 +32,26 @@ if not DATABASE_URL:
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Create engine with optimized connection pooling
-# Centralized here so SessionLocal and all imports benefit from tuning
+# Create async URL for asyncpg driver
+ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+
+# =============================================================================
+# SYNC ENGINE (for backward compatibility and migrations)
+# =============================================================================
 engine = create_engine(
     DATABASE_URL,
-    pool_size=10,           # Number of connections to keep in the pool
-    max_overflow=20,        # Number of connections allowed above pool_size
-    pool_recycle=1800,      # Recycle connections after 30 minutes
-    pool_pre_ping=True      # Check connection health before using
+    pool_size=10,
+    max_overflow=20,
+    pool_recycle=1800,
+    pool_pre_ping=True
 )
 
-# Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db():
-    """Dependency to get database session"""
+    """Sync dependency to get database session (for backward compatibility)"""
     db = SessionLocal()
     try:
         yield db
@@ -49,6 +59,51 @@ def get_db():
         db.close()
 
 
+# =============================================================================
+# ASYNC ENGINE (preferred for new code)
+# =============================================================================
+async_engine = create_async_engine(
+    ASYNC_DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_recycle=1800,
+    echo=False,
+)
+
+AsyncSessionLocal = async_sessionmaker(
+    async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
+)
+
+
+async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
+    """Async dependency to get database session (preferred)"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
 # Re-export for backward compatibility
-__all__ = ["engine", "SessionLocal", "Base", "get_db", "User", "WardrobeItem", "SavedOutfit"]
+__all__ = [
+    # Sync (backward compat)
+    "engine", 
+    "SessionLocal", 
+    "get_db",
+    # Async (preferred)
+    "async_engine",
+    "AsyncSessionLocal",
+    "get_async_db",
+    # Models
+    "Base", 
+    "User", 
+    "WardrobeItem", 
+    "SavedOutfit",
+]
 

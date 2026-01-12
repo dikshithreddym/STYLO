@@ -174,14 +174,13 @@ async def health_check():
     Use /ready for readiness check (waits for startup completion).
     Supports both GET and HEAD methods for monitoring services.
     """
-    # Quick database connectivity check (non-blocking, with timeout)
+    # Quick async database connectivity check (non-blocking)
     db_ok = False
     try:
-        # Quick connection test with timeout
-        from app.database import engine
+        from app.database import async_engine
         from sqlalchemy import text
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
             db_ok = True
     except Exception:
         # Database check failed, but don't fail health check during startup

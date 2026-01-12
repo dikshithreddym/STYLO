@@ -423,3 +423,106 @@ def batch_refresh_embeddings(db: Session, item_ids: Optional[List[int]] = None, 
     logger.info(f"Batch refresh completed: {total_refreshed}/{total_items} embeddings refreshed")
     return total_refreshed
 
+
+async def batch_refresh_embeddings_async(db, item_ids: Optional[List[int]] = None, batch_size: int = None) -> int:
+    """
+    Async batch refresh embeddings for multiple items.
+    Works with AsyncSession.
+    
+    Args:
+        db: AsyncSession database session
+        item_ids: List of item IDs to refresh (None = refresh all items without embeddings)
+        batch_size: Number of items to process per batch (None = use default BATCH_SIZE)
+        
+    Returns:
+        Number of embeddings successfully refreshed
+    """
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+    
+    if item_ids:
+        result = await db.execute(
+            select(WardrobeItem).where(WardrobeItem.id.in_(item_ids))
+        )
+        items = result.scalars().all()
+    else:
+        # Refresh items that don't have embeddings yet
+        result = await db.execute(
+            select(WardrobeItem).where(WardrobeItem.embedding.is_(None))
+        )
+        items = result.scalars().all()
+    
+    if not items:
+        logger.info("No items to refresh")
+        return 0
+    
+    # Use provided batch size or default from config
+    process_batch_size = batch_size or get_batch_size()
+    
+    total_refreshed = 0
+    total_items = len(items)
+    
+    # Process in batches for better memory efficiency
+    for i in range(0, total_items, process_batch_size):
+        batch = items[i:i + process_batch_size]
+        
+        # Compute embeddings for batch (CPU-bound, runs sync)
+        embedding_results = compute_embeddings_batch(batch)
+        
+        if embedding_results:
+            # Persist batch using async session
+            persisted = await persist_embeddings_batch_async(db, embedding_results)
+            total_refreshed += persisted
+            
+            logger.info(f"Processed batch {i//process_batch_size + 1}: {persisted}/{len(batch)} embeddings refreshed")
+    
+    logger.info(f"Async batch refresh completed: {total_refreshed}/{total_items} embeddings refreshed")
+    return total_refreshed
+
+
+async def persist_embeddings_batch_async(db, embeddings: List[tuple[int, List[float]]]) -> int:
+    """
+    Persist multiple embeddings to database in a single transaction (async version).
+    
+    Args:
+        db: AsyncSession database session
+        embeddings: List of tuples (item_id, embedding_list)
+        
+    Returns:
+        Number of successfully persisted embeddings
+    """
+    from sqlalchemy import select
+    
+    if not embeddings:
+        return 0
+    
+    try:
+        # Get all item IDs
+        item_ids = [item_id for item_id, _ in embeddings]
+        
+        # Fetch all items in one query
+        result = await db.execute(
+            select(WardrobeItem).where(WardrobeItem.id.in_(item_ids))
+        )
+        items = result.scalars().all()
+        item_map = {item.id: item for item in items}
+        
+        # Update items with embeddings
+        updated = 0
+        for item_id, embedding in embeddings:
+            if item_id in item_map:
+                item_map[item_id].embedding = embedding
+                updated += 1
+            else:
+                logger.warning(f"Item {item_id} not found for batch embedding update")
+        
+        # Single commit for all updates
+        await db.commit()
+        logger.debug(f"Async batch persisted {updated} embeddings")
+        return updated
+        
+    except Exception as e:
+        logger.error(f"Failed to persist async batch embeddings: {e}")
+        await db.rollback()
+        return 0
+
