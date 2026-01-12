@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from app.routers import wardrobe_db as wardrobe
 from app.routers import suggestions_v2
 from app.routers import auth
@@ -20,6 +23,13 @@ from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Rate Limiting Configuration
+# =============================================================================
+# Rate limiter using client IP address as key
+# Limits can be customized per endpoint using @limiter.limit() decorator
+limiter = Limiter(key_func=get_remote_address)
 
 # Global flag to track startup completion
 _startup_complete = False
@@ -128,6 +138,10 @@ app = FastAPI(
 app.add_exception_handler(StyloException, stylo_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
+
+# Rate limiting setup
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

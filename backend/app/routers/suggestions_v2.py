@@ -1,12 +1,12 @@
-from __future__ import annotations
-
 import os
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from ..database import get_async_db, User
 from ..database import WardrobeItem
@@ -21,6 +21,8 @@ from ..utils.cache import get_cached_suggestion, set_cached_suggestion
 import hashlib
 import json
 
+# Rate limiter for suggestion endpoints (ML/Gemini calls are expensive)
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/v2", tags=["suggestions-v2"])
 
@@ -79,7 +81,8 @@ def _model_to_dict(it: WardrobeItem) -> dict:
 
 
 @router.post("/suggestions", response_model=V2SuggestResponse)
-async def suggest_v2(req: V2SuggestRequest, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
+@limiter.limit("30/minute")  # Rate limit ML/Gemini calls to prevent abuse
+async def suggest_v2(request: Request, req: V2SuggestRequest, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user_async)):
     # Reset profiler for this request
     profiler = reset_profiler()
     

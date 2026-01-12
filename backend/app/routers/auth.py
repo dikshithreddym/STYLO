@@ -1,20 +1,27 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import timedelta
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app.database import get_async_db, User
 from app.schemas import UserCreate, UserResponse, Token
 from app.utils.auth import get_password_hash, verify_password, create_access_token, get_current_user_async
 from app.config import settings
+
+# Rate limiter for auth endpoints (uses same key function as main app)
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"]
 )
 
+
 @router.post("/signup", response_model=UserResponse)
-async def create_user(user: UserCreate, db: AsyncSession = Depends(get_async_db)):
+@limiter.limit("5/minute")  # Prevent signup abuse
+async def create_user(request: Request, user: UserCreate, db: AsyncSession = Depends(get_async_db)):
     result = await db.execute(select(User).where(User.email == user.email))
     db_user = result.scalar_one_or_none()
     if db_user:
@@ -27,7 +34,8 @@ async def create_user(user: UserCreate, db: AsyncSession = Depends(get_async_db)
     return db_user
 
 @router.post("/login", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_async_db)):
+@limiter.limit("10/minute")  # Prevent brute force attacks
+async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_async_db)):
     # OAuth2PasswordRequestForm stores email in 'username' field
     result = await db.execute(select(User).where(User.email == form_data.username))
     user = result.scalar_one_or_none()
