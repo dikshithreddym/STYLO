@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import wardrobe_db as wardrobe
@@ -14,16 +15,71 @@ from threading import Lock
 _startup_complete = False
 _startup_lock = Lock()
 
-# Create database tables (engine is already configured with pooling in database.py)
-Base.metadata.create_all(bind=engine)
 
-app = FastAPI(
-    title="STYLO API",
-    description="Backend API for STYLO wardrobe management",
-    version="1.0.0"
-)
+async def _run_startup_tasks() -> None:
+    """Run startup tasks in background to avoid blocking health checks"""
+    global _startup_complete
+    
+    try:
+        # The migration checks for the column and only adds if missing
+        from migrate_add_image_description import migrate  # type: ignore
+        migrate()
+        print("✅ Startup migration completed (image_description column ensured)")
+    except Exception as exc:
+        # Do not crash app on migration failure; log for visibility
+        print(f"⚠️  Migration on startup skipped/failed: {exc}")
+    
+    # Pre-load sentence-transformers model to avoid cold start timeouts
+    try:
+        print("🔄 Pre-loading sentence-transformers model...")
+        from sentence_transformers import SentenceTransformer
+        _ = SentenceTransformer('all-MiniLM-L6-v2')
+        print("✅ Model pre-loaded successfully")
+    except Exception as exc:
+        print(f"⚠️  Model pre-load failed: {exc}")
+    
+    # Backfill will only run if BACKFILL_ON_STARTUP=true is set in environment
+    # This avoids running backfill on every startup unless explicitly required
+    if os.getenv("BACKFILL_ON_STARTUP", "false").lower() == "true":
+        try:
+            print("🔄 Running image description backfill...")
+            from backfill_image_descriptions import backfill_descriptions  # type: ignore
+            await backfill_descriptions()
+            print("✅ Backfill completed on startup")
+        except Exception as exc:
+            print(f"⚠️  Backfill on startup failed: {exc}")
+    
+    # Mark startup as complete
+    with _startup_lock:
+        _startup_complete = True
+    print("✅ Startup tasks completed")
 
-# CORS configuration
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager - handles startup and shutdown events."""
+    # === STARTUP ===
+    # Create database tables
+    Base.metadata.create_all(bind=engine)
+    
+    # Run startup tasks in background (non-blocking)
+    asyncio.create_task(_run_startup_tasks())
+    
+    # Start embedding worker for async embedding updates (non-blocking)
+    try:
+        start_embedding_worker()
+        print("✅ Embedding worker started")
+    except Exception as e:
+        print(f"⚠️  Could not start embedding worker: {e}. Embeddings will be computed on-demand.")
+    
+    print("🚀 Server starting, startup tasks running in background...")
+    
+    yield  # Application runs here
+    
+    # === SHUTDOWN ===
+    print("👋 Server shutting down...")
+
+
 # CORS configuration
 # We start with a default list of known trusted origins
 allowed_origins = [
@@ -49,6 +105,14 @@ if frontend_url and frontend_url not in allowed_origins:
 
 print(f"✅ Enabled CORS for origins: {allowed_origins}")
 
+
+app = FastAPI(
+    title="STYLO API",
+    description="Backend API for STYLO wardrobe management",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
 app.add_middleware(
     CORSMiddleware,
     # allow_origins=["*"] with allow_credentials=True is invalid/insecure.
@@ -60,60 +124,6 @@ app.add_middleware(
     expose_headers=["X-Total-Count"],
 )
 
-# Run lightweight, idempotent DB migrations on startup (non-blocking)
-@app.on_event("startup")
-async def run_startup_migrations() -> None:
-    """Run startup tasks in background to avoid blocking health checks"""
-    global _startup_complete
-    
-    async def _startup_tasks():
-        global _startup_complete
-        try:
-            # The migration checks for the column and only adds if missing
-            from migrate_add_image_description import migrate  # type: ignore
-            migrate()
-            print("✅ Startup migration completed (image_description column ensured)")
-        except Exception as exc:
-            # Do not crash app on migration failure; log for visibility
-            print(f"⚠️  Migration on startup skipped/failed: {exc}")
-        
-        # Pre-load sentence-transformers model to avoid cold start timeouts
-        try:
-            print("🔄 Pre-loading sentence-transformers model...")
-            from sentence_transformers import SentenceTransformer
-            _ = SentenceTransformer('all-MiniLM-L6-v2')
-            print("✅ Model pre-loaded successfully")
-        except Exception as exc:
-            print(f"⚠️  Model pre-load failed: {exc}")
-        
-        # Backfill will only run if BACKFILL_ON_STARTUP=true is set in environment
-        # This avoids running backfill on every startup unless explicitly required
-        if os.getenv("BACKFILL_ON_STARTUP", "false").lower() == "true":
-            try:
-                print("🔄 Running image description backfill...")
-                from backfill_image_descriptions import backfill_descriptions  # type: ignore
-                await backfill_descriptions()
-                print("✅ Backfill completed on startup")
-            except Exception as exc:
-                print(f"⚠️  Backfill on startup failed: {exc}")
-        
-        # Mark startup as complete
-        with _startup_lock:
-            _startup_complete = True
-        print("✅ Startup tasks completed")
-    
-    # Run startup tasks in background (non-blocking)
-    asyncio.create_task(_startup_tasks())
-    
-    # Start embedding worker for async embedding updates (non-blocking)
-    # This runs in the same async context as startup tasks
-    try:
-        start_embedding_worker()
-        print("✅ Embedding worker started")
-    except Exception as e:
-        print(f"⚠️  Could not start embedding worker: {e}. Embeddings will be computed on-demand.")
-    
-    print("🚀 Server starting, startup tasks running in background...")
 
 # Admin endpoint for manual backfill trigger
 @app.post("/admin/backfill-descriptions")
