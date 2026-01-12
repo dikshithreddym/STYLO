@@ -38,14 +38,14 @@ def get_batch_size() -> int:
     """Get batch size from settings or environment"""
     try:
         return settings.EMBEDDING_BATCH_SIZE
-    except:
+    except (AttributeError, TypeError):
         return int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))
 
 def get_batch_timeout() -> float:
     """Get batch timeout from settings or environment"""
     try:
         return settings.EMBEDDING_BATCH_TIMEOUT
-    except:
+    except (AttributeError, TypeError):
         return float(os.getenv("EMBEDDING_BATCH_TIMEOUT", "2.0"))
 
 

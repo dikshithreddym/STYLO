@@ -1,16 +1,25 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import wardrobe_db as wardrobe
 from app.routers import suggestions_v2
 from app.routers import auth
 from app.database import engine, Base
 from app.utils.embedding_service import start_embedding_worker
+from app.core.exceptions import (
+    StyloException,
+    stylo_exception_handler,
+    http_exception_handler,
+    generic_exception_handler,
+)
 from datetime import datetime
 import os
 import asyncio
+import logging
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
+
+logger = logging.getLogger(__name__)
 
 # Global flag to track startup completion
 _startup_complete = False
@@ -114,6 +123,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Register custom exception handlers for consistent error responses
+app.add_exception_handler(StyloException, stylo_exception_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 
 app.add_middleware(
     CORSMiddleware,

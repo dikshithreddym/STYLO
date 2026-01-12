@@ -88,7 +88,7 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
                     error_json = {}
                     try:
                         error_json = response.json()
-                    except:
+                    except (ValueError, KeyError):
                         pass
                     
                     error_message = error_json.get('error', {}).get('message', 'Rate limit exceeded')
@@ -115,7 +115,7 @@ async def analyze_clothing_image(image_data: str) -> Optional[str]:
                     try:
                         error_json = response.json()
                         logger.error(f"Gemini API error details: {error_json}")
-                    except:
+                    except (ValueError, KeyError):
                         pass
                     return None
 
