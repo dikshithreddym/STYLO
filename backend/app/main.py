@@ -264,115 +264,122 @@ async def root():
     }
 
 
-@app.get("/test-cache-debug")
-async def test_cache_debug():
-    """Debug cache behavior for suggestions"""
-    from app.utils.cache import get_redis_client, get_cached_suggestion, set_cached_suggestion, _generate_cache_key
-    import hashlib
-    import json
-    
-    redis_client = get_redis_client()
-    
-    test_query = "business meeting"
-    test_hash = "10"
-    
-    # Generate the same key that would be used
-    cache_key = _generate_cache_key("suggestion", test_query, test_hash)
-    
-    # Check what's in Redis
-    all_suggestion_keys = []
-    if redis_client:
-        try:
-            all_suggestion_keys = redis_client.keys("suggestion:*")
-        except Exception as e:
-            pass
-    
-    # Test set/get
-    test_result = {"intent": "business", "outfits": [{"test": "outfit"}]}
-    set_success = set_cached_suggestion(test_query, test_hash, test_result, ttl=60)
-    get_result = get_cached_suggestion(test_query, test_hash)
-    
-    return {
-        "cache_key_generated": cache_key,
-        "cache_key_short": cache_key[:50] + "..." if len(cache_key) > 50 else cache_key,
-        "set_success": set_success,
-        "get_result": get_result,
-        "get_matches_set": get_result == test_result,
-        "redis_keys_found": len(all_suggestion_keys),
-        "sample_keys": [k[:60] for k in list(all_suggestion_keys)[:10]],
-        "test_query": test_query,
-        "test_hash": test_hash
-    }
+# =============================================================================
+# DEBUG/TEST ENDPOINTS - Only available in development environment
+# =============================================================================
+_is_development = os.getenv("ENVIRONMENT", "development").lower() == "development"
 
-
-@app.get("/test-redis")
-async def test_redis():
-    """Test Redis connection and caching"""
-    from app.utils.cache import get_redis_client, cache_set, cache_get, get_cached_suggestion, set_cached_suggestion
-    import logging
-    
-    logger = logging.getLogger(__name__)
-    
-    redis_client = get_redis_client()
-    
-    if not redis_client:
-        return {
-            "status": "not_connected",
-            "message": "Redis client not available - using in-memory cache",
-            "redis_available": False,
-            "redis_url": os.getenv("REDIS_URL", "not set")
-        }
-    
-    try:
-        # Test connection
-        ping_result = redis_client.ping()
+if _is_development:
+    @app.get("/test-cache-debug")
+    async def test_cache_debug():
+        """Debug cache behavior for suggestions (DEV ONLY)"""
+        from app.utils.cache import get_redis_client, get_cached_suggestion, set_cached_suggestion, _generate_cache_key
+        import hashlib
+        import json
         
-        # Test set/get
-        test_key = "test:connection"
-        test_value = {"test": "data", "timestamp": "2025-11-21", "works": True}
+        redis_client = get_redis_client()
         
-        # Set value
-        cache_set(test_key, test_value, ttl=60)
-        
-        # Get value
-        cached = cache_get(test_key)
-        
-        # Test direct Redis operations
-        direct_set = redis_client.set("test:direct", "test_value", ex=60)
-        direct_get = redis_client.get("test:direct")
-        
-        # Test suggestion cache functions
         test_query = "business meeting"
         test_hash = "10"
-        test_suggestion = {"intent": "business", "outfits": [{"test": "outfit"}]}
-        set_cached_suggestion(test_query, test_hash, test_suggestion, ttl=60)
-        cached_suggestion = get_cached_suggestion(test_query, test_hash)
         
-        # Check Redis keys
-        all_keys = redis_client.keys("suggestion:*")
+        # Generate the same key that would be used
+        cache_key = _generate_cache_key("suggestion", test_query, test_hash)
+        
+        # Check what's in Redis
+        all_suggestion_keys = []
+        if redis_client:
+            try:
+                all_suggestion_keys = redis_client.keys("suggestion:*")
+            except Exception as e:
+                pass
+        
+        # Test set/get
+        test_result = {"intent": "business", "outfits": [{"test": "outfit"}]}
+        set_success = set_cached_suggestion(test_query, test_hash, test_result, ttl=60)
+        get_result = get_cached_suggestion(test_query, test_hash)
         
         return {
-            "status": "connected",
-            "message": "Redis is working!",
-            "redis_available": True,
-            "ping": "OK" if ping_result else "FAILED",
-            "set_get_test": "PASSED" if cached == test_value else "FAILED",
-            "cached_value": cached,
-            "direct_redis_test": "PASSED" if direct_get == "test_value" else "FAILED",
-            "suggestion_cache_test": "PASSED" if cached_suggestion == test_suggestion else "FAILED",
-            "cached_suggestion": cached_suggestion,
-            "redis_keys_count": len(all_keys),
-            "sample_keys": [k[:50] for k in list(all_keys)[:5]],
-            "redis_url": os.getenv("REDIS_URL", "not set")[:50] + "..." if os.getenv("REDIS_URL") else "not set"
+            "cache_key_generated": cache_key,
+            "cache_key_short": cache_key[:50] + "..." if len(cache_key) > 50 else cache_key,
+            "set_success": set_success,
+            "get_result": get_result,
+            "get_matches_set": get_result == test_result,
+            "redis_keys_found": len(all_suggestion_keys),
+            "sample_keys": [k[:60] for k in list(all_suggestion_keys)[:10]],
+            "test_query": test_query,
+            "test_hash": test_hash
         }
-    except Exception as e:
-        logger.error(f"Redis test error: {e}", exc_info=True)
-        return {
-            "status": "error",
-            "message": f"Redis error: {str(e)}",
-            "redis_available": True,
-            "error": str(e),
-            "error_type": type(e).__name__,
-            "redis_url": os.getenv("REDIS_URL", "not set")[:50] + "..." if os.getenv("REDIS_URL") else "not set"
-        }
+
+
+    @app.get("/test-redis")
+    async def test_redis():
+        """Test Redis connection and caching (DEV ONLY)"""
+        from app.utils.cache import get_redis_client, cache_set, cache_get, get_cached_suggestion, set_cached_suggestion
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        redis_client = get_redis_client()
+        
+        if not redis_client:
+            return {
+                "status": "not_connected",
+                "message": "Redis client not available - using in-memory cache",
+                "redis_available": False,
+                "redis_url": os.getenv("REDIS_URL", "not set")
+            }
+        
+        try:
+            # Test connection
+            ping_result = redis_client.ping()
+            
+            # Test set/get
+            test_key = "test:connection"
+            test_value = {"test": "data", "timestamp": "2025-11-21", "works": True}
+            
+            # Set value
+            cache_set(test_key, test_value, ttl=60)
+            
+            # Get value
+            cached = cache_get(test_key)
+            
+            # Test direct Redis operations
+            direct_set = redis_client.set("test:direct", "test_value", ex=60)
+            direct_get = redis_client.get("test:direct")
+            
+            # Test suggestion cache functions
+            test_query = "business meeting"
+            test_hash = "10"
+            test_suggestion = {"intent": "business", "outfits": [{"test": "outfit"}]}
+            set_cached_suggestion(test_query, test_hash, test_suggestion, ttl=60)
+            cached_suggestion = get_cached_suggestion(test_query, test_hash)
+            
+            # Check Redis keys
+            all_keys = redis_client.keys("suggestion:*")
+            
+            return {
+                "status": "connected",
+                "message": "Redis is working!",
+                "redis_available": True,
+                "ping": "OK" if ping_result else "FAILED",
+                "set_get_test": "PASSED" if cached == test_value else "FAILED",
+                "cached_value": cached,
+                "direct_redis_test": "PASSED" if direct_get == "test_value" else "FAILED",
+                "suggestion_cache_test": "PASSED" if cached_suggestion == test_suggestion else "FAILED",
+                "cached_suggestion": cached_suggestion,
+                "redis_keys_count": len(all_keys),
+                "sample_keys": [k[:50] for k in list(all_keys)[:5]],
+                "redis_url": os.getenv("REDIS_URL", "not set")[:50] + "..." if os.getenv("REDIS_URL") else "not set"
+            }
+        except Exception as e:
+            logger.error(f"Redis test error: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Redis error: {str(e)}",
+                "redis_available": True,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "redis_url": os.getenv("REDIS_URL", "not set")[:50] + "..." if os.getenv("REDIS_URL") else "not set"
+            }
+
     
