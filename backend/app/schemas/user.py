@@ -1,20 +1,36 @@
 """
 User-related schemas for authentication and user management.
 """
-from pydantic import BaseModel, Field
+import re
+from pydantic import BaseModel, Field, field_validator, EmailStr
 from typing import Optional
 from datetime import datetime
 
 
 class UserBase(BaseModel):
     """Base user schema"""
-    email: str = Field(..., description="User email address")
+    email: EmailStr = Field(..., description="User email address")
 
 
 class UserCreate(UserBase):
     """Schema for creating a new user"""
-    password: str = Field(..., description="User password")
+    password: str = Field(
+        ..., 
+        min_length=8, 
+        max_length=128,
+        description="User password (8-128 chars, must contain letter and digit)"
+    )
     full_name: Optional[str] = Field(None, description="User full name")
+    
+    @field_validator('password')
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        """Ensure password has at least one letter and one digit."""
+        if not re.search(r'[A-Za-z]', v):
+            raise ValueError('Password must contain at least one letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one digit')
+        return v
 
 
 class UserLogin(UserBase):
