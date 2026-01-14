@@ -234,27 +234,13 @@ app.include_router(auth.router)
 @app.head("/health")
 async def health_check():
     """
-    Health check endpoint - returns immediately to avoid timeouts.
-    This endpoint should respond in < 100ms to prevent deployment platform timeouts.
-    Use /ready for readiness check (waits for startup completion).
-    Supports both GET and HEAD methods for monitoring services.
+    Health check endpoint - pure liveness probe.
+    Returns immediately to avoid timeouts; platform health checks should
+    hit this endpoint. Readiness verification (DB, etc.) is handled by /ready.
     """
-    # Quick async database connectivity check (non-blocking)
-    db_ok = False
-    try:
-        from app.database import async_engine
-        from sqlalchemy import text
-        async with async_engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-            db_ok = True
-    except Exception:
-        # Database check failed, but don't fail health check during startup
-        db_ok = False
-    
     return {
         "status": "ok",
         "ready": _startup_complete,
-        "database": "connected" if db_ok else "checking"
     }
 
 
@@ -262,17 +248,33 @@ async def health_check():
 async def readiness_check():
     """
     Readiness check endpoint - verifies app is fully ready.
-    Returns 200 when startup tasks complete, 503 if still starting.
+    Returns 200 when startup tasks complete and DB is reachable,
+    503 if still starting or DB connectivity fails.
     """
     from fastapi import status
     from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+    from app.database import async_engine
+    import asyncio
     
-    if _startup_complete:
-        return {"status": "ready", "message": "Application is ready"}
-    else:
+    if not _startup_complete:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "starting", "message": "Application is still starting up"}
+        )
+
+    # Verify DB connectivity with a bounded timeout
+    async def _db_ping():
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+
+    try:
+        await asyncio.wait_for(_db_ping(), timeout=2.0)
+        return {"status": "ready", "message": "Application is ready"}
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "degraded", "message": "Database not reachable", "error": str(e)}
         )
 
 
